@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Court STT — Live Transcription</title>
+  <style>
+    /* ── Reset & Base ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d1117;
+      --bg2:         #161b22;
+      --bg3:         #21262d;
+      --border:      #30363d;
+      --text:        #e6edf3;
+      --text-dim:    #7d8590;
+      --judge:       #e0a020;
+      --judge-dim:   #7a5510;
+      --lawyer1:     #4a9eda;
+      --lawyer1-dim: #1a4a6a;
+      --lawyer2:     #5acc8a;
+      --lawyer2-dim: #1a5a35;
+      --danger:      #f85149;
+      --success:     #56d364;
+      --radius:      8px;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ── Top Bar ───────────────────────────────────────────────────── */
+    header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -.3px;
+      white-space: nowrap;
+    }
+
+    .logo svg { width: 28px; height: 28px; }
+
+    .session-badge {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+      color: var(--text-dim);
+      cursor: text;
+      user-select: all;
+      transition: border-color .2s;
+    }
+    .session-badge.has-session {
+      color: var(--text);
+      border-color: #4a9eda55;
+    }
+
+    .header-actions { margin-left: auto; display: flex; gap: 8px; }
+
+    button {
+      border: none;
+      border-radius: var(--radius);
+      padding: 7px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+    }
+    button:hover { opacity: .85; }
+    button:active { transform: scale(.97); }
+    button:disabled { opacity: .35; cursor: default; transform: none; }
+
+    .btn-primary { background: #238636; color: #fff; }
+    .btn-danger  { background: #da3633; color: #fff; }
+    .btn-neutral { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+    .btn-merge   { background: #6e40c9; color: #fff; }
+
+    /* ── Main layout ───────────────────────────────────────────────── */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 20px 24px;
+      max-width: 1600px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .speakers-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    /* ── Speaker Panel ─────────────────────────────────────────────── */
+    .panel {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: border-color .3s, box-shadow .3s;
+    }
+
+    .panel.recording {
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 40%, transparent);
+      border-color: color-mix(in srgb, var(--c) 60%, transparent);
+    }
+
+    .panel-head {
+      background: color-mix(in srgb, var(--c) 12%, var(--bg2));
+      border-bottom: 1px solid color-mix(in srgb, var(--c) 25%, var(--border));
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .speaker-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--c);
+      flex-shrink: 0;
+    }
+
+    .recording .speaker-dot {
+      animation: pulse 1.4s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--c) 70%, transparent); }
+      50%       { box-shadow: 0 0 0 6px transparent; }
+    }
+
+    .panel-head h2 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--c);
+      flex: 1;
+    }
+
+    .status-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      background: var(--bg3);
+      border-radius: 10px;
+      padding: 2px 9px;
+      border: 1px solid var(--border);
+      transition: all .3s;
+    }
+    .recording .status-label {
+      background: color-mix(in srgb, var(--c) 20%, var(--bg3));
+      color: var(--c);
+      border-color: color-mix(in srgb, var(--c) 50%, transparent);
+    }
+
+    .panel-controls {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+    }
+
+    /* ── Transcript scroll area ────────────────────────────────────── */
+    .transcript {
+      flex: 1;
+      min-height: 260px;
+      max-height: 340px;
+      overflow-y: auto;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .transcript::-webkit-scrollbar { width: 5px; }
+    .transcript::-webkit-scrollbar-track { background: transparent; }
+    .transcript::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .utterance {
+      background: var(--bg3);
+      border-left: 3px solid var(--c);
+      border-radius: 0 6px 6px 0;
+      padding: 8px 12px;
+      animation: slideIn .25s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .utterance .ts {
+      font-size: 10px;
+      color: var(--text-dim);
+      font-family: 'Consolas', monospace;
+      margin-bottom: 3px;
+    }
+
+    .utterance .words { line-height: 1.5; }
+
+    .partial-text {
+      color: var(--text-dim);
+      font-style: italic;
+      font-size: 13px;
+      min-height: 22px;
+      padding: 4px 0;
+      transition: opacity .2s;
+    }
+
+    .partial-text::before {
+      content: '…';
+      margin-right: 4px;
+      color: var(--c);
+      animation: blink .8s infinite;
+    }
+
+    @keyframes blink {
+      0%,100% { opacity: 1; }
+      50%      { opacity: .3; }
+    }
+
+    .empty-hint {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 13px;
+      margin-top: 40px;
+    }
+
+    /* ── Unified Timeline ──────────────────────────────────────────── */
+    .unified-section {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .unified-head {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .unified-head h2 { font-size: 15px; font-weight: 700; flex: 1; }
+
+    .counter {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 2px 10px;
+      font-size: 12px;
+      color: var(--text-dim);
+      font-family: 'Consolas', monospace;
+    }
+
+    .unified-scroll {
+      max-height: 300px;
+      overflow-y: auto;
+      padding: 12px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .unified-scroll::-webkit-scrollbar { width: 5px; }
+    .unified-scroll::-webkit-scrollbar-track { background: transparent; }
+    .unified-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    .timeline-entry {
+      display: flex;
+      gap: 12px;
+      align-items: baseline;
+      padding: 6px 10px;
+      border-radius: 6px;
+      animation: slideIn .3s ease;
+      transition: background .15s;
+    }
+    .timeline-entry:hover { background: var(--bg3); }
+
+    .tl-turn {
+      font-size: 10px;
+      color: var(--text-dim);
+      font-family: 'Consolas', monospace;
+      min-width: 28px;
+    }
+
+    .tl-ts {
+      font-size: 10px;
+      color: var(--text-dim);
+      font-family: 'Consolas', monospace;
+      min-width: 90px;
+    }
+
+    .tl-speaker {
+      font-weight: 700;
+      font-size: 12px;
+      min-width: 80px;
+    }
+
+    .tl-text { font-size: 14px; line-height: 1.4; }
+
+    .unified-empty {
+      text-align: center;
+      color: var(--text-dim);
+      padding: 40px 0;
+      font-size: 13px;
+    }
+
+    /* ── Notification toast ────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 18px;
+      font-size: 13px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.4);
+      transform: translateY(80px);
+      opacity: 0;
+      transition: transform .3s cubic-bezier(.34,1.56,.64,1), opacity .3s;
+      z-index: 1000;
+      max-width: 340px;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+
+    /* ── Connection indicator ──────────────────────────────────────── */
+    .ws-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #555;
+      display: inline-block;
+      margin-right: 6px;
+      transition: background .3s;
+    }
+    .ws-dot.connected { background: var(--success); }
+    .ws-dot.error     { background: var(--danger); }
+
+    /* ── Responsive ────────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .speakers-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path d="M3 18h18M12 2v4M8 6l4-4 4 4M5 18V8l7-3 7 3v10" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Court STT
+  </div>
+
+  <span id="sessionBadge" class="session-badge">No active session</span>
+  <span><span class="ws-dot" id="wsDot"></span><span id="wsLabel" style="font-size:12px;color:var(--text-dim)">Disconnected</span></span>
+
+  <div class="header-actions">
+    <button class="btn-primary" id="btnNew">＋ New Session</button>
+    <button class="btn-merge"   id="btnMerge"  disabled>⟳ Merge</button>
+    <button class="btn-neutral" id="btnDownload" disabled>↓ Download</button>
+  </div>
+</header>
+
+<main>
+  <div class="speakers-row" id="speakersRow">
+    <!-- Panels injected by JS -->
+  </div>
+
+  <section class="unified-section">
+    <div class="unified-head">
+      <h2>📜 Unified Timeline</h2>
+      <span class="counter" id="turnCounter">0 turns</span>
+      <button class="btn-neutral" id="btnClearUnified" style="font-size:11px;padding:4px 10px">Clear</button>
+    </div>
+    <div class="unified-scroll" id="unifiedScroll">
+      <div class="unified-empty" id="unifiedEmpty">Start a session and begin recording to see the unified transcript here.</div>
+    </div>
+  </section>
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ── Speaker config ──────────────────────────────────────────────────────────
+const SPEAKERS = [
+  { role: "Judge",    label: "⚖️ Judge",    cssVar: "--judge"   },
+  { role: "Lawyer_1", label: "👤 Lawyer 1", cssVar: "--lawyer1" },
+  { role: "Lawyer_2", label: "👤 Lawyer 2", cssVar: "--lawyer2" },
+];
+
+// ── App state ───────────────────────────────────────────────────────────────
+let sessionId  = null;
+let ws         = null;
+let wsRetry    = 0;
+let colors     = {};
+let allEntries = [];        // live accumulated entries for unified view
+let lastMerged = null;      // last merged JSON from server
+
+// ── Toast helper ─────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, dur = 3500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+// ── Build speaker panels ─────────────────────────────────────────────────────
+function buildPanels() {
+  const row = document.getElementById('speakersRow');
+  row.innerHTML = '';
+  for (const sp of SPEAKERS) {
+    const panel = document.createElement('div');
+    panel.className = 'panel';
+    panel.id = `panel-${sp.role}`;
+    panel.style.setProperty('--c', `var(${sp.cssVar})`);
+    panel.innerHTML = `
+      <div class="panel-head">
+        <div class="speaker-dot"></div>
+        <h2>${sp.label}</h2>
+        <span class="status-label" id="status-${sp.role}">Idle</span>
+      </div>
+      <div class="panel-controls">
+        <button class="btn-primary" id="btnStart-${sp.role}" onclick="startSpeaker('${sp.role}')" disabled>
+          ▶ Start
+        </button>
+        <button class="btn-danger"  id="btnStop-${sp.role}"  onclick="stopSpeaker('${sp.role}')"  disabled>
+          ■ Stop
+        </button>
+      </div>
+      <div class="transcript" id="transcript-${sp.role}">
+        <div class="empty-hint" id="hint-${sp.role}">Press <strong>Start</strong> to begin recording.</div>
+        <div class="partial-text" id="partial-${sp.role}" style="display:none"></div>
+      </div>
+    `;
+    row.appendChild(panel);
+  }
+}
+
+// ── Session control ──────────────────────────────────────────────────────────
+document.getElementById('btnNew').addEventListener('click', async () => {
+  if (sessionId && !confirm('Start a new session? Current session data is preserved.')) return;
+  // Stop all active speakers first
+  if (sessionId) {
+    for (const sp of SPEAKERS) {
+      if (document.getElementById(`btnStop-${sp.role}`)?.disabled === false) {
+        await stopSpeaker(sp.role);
+      }
+    }
+  }
+  try {
+    const res  = await fetch('/api/session/new', { method: 'POST' });
+    const data = await res.json();
+    sessionId = data.session_id;
+    colors    = data.colors;
+    allEntries = [];
+    lastMerged = null;
+    updateSessionBadge();
+    buildPanels();
+    clearUnified();
+    enableStartButtons();
+    connectWS();
+    document.getElementById('btnMerge').disabled    = false;
+    document.getElementById('btnDownload').disabled = true;
+    toast(`Session created: ${sessionId}`);
+  } catch(e) {
+    toast('❌ Cannot reach server — is it running?');
+  }
+});
+
+function updateSessionBadge() {
+  const badge = document.getElementById('sessionBadge');
+  badge.textContent = sessionId || 'No active session';
+  badge.classList.toggle('has-session', !!sessionId);
+}
+
+// ── Speaker controls ─────────────────────────────────────────────────────────
+async function startSpeaker(role) {
+  document.getElementById(`btnStart-${role}`).disabled = true;
+  document.getElementById(`btnStop-${role}`).disabled  = false;
+  setStatus(role, 'Connecting…');
+  try {
+    await fetch(`/api/session/${sessionId}/start/${role}`, { method: 'POST' });
+    const hint = document.getElementById(`hint-${role}`);
+    if (hint) hint.style.display = 'none';
+    document.getElementById(`partial-${role}`).style.display = 'block';
+  } catch(e) {
+    toast(`❌ Could not start ${role}`);
+    document.getElementById(`btnStart-${role}`).disabled = false;
+    document.getElementById(`btnStop-${role}`).disabled  = true;
+  }
+}
+
+async function stopSpeaker(role) {
+  document.getElementById(`btnStop-${role}`).disabled  = true;
+  document.getElementById(`btnStart-${role}`).disabled = false;
+  setStatus(role, 'Stopping…');
+  try {
+    const res  = await fetch(`/api/session/${sessionId}/stop/${role}`, { method: 'POST' });
+    const data = await res.json();
+    toast(`${role} stopped — ${data.entries} utterances saved`);
+  } catch(e) { toast(`❌ Could not stop ${role}`); }
+  setStatus(role, 'Idle');
+  setRecording(role, false);
+  const partial = document.getElementById(`partial-${role}`);
+  if (partial) { partial.style.display = 'none'; partial.textContent = ''; }
+}
+
+// ── Merge ────────────────────────────────────────────────────────────────────
+document.getElementById('btnMerge').addEventListener('click', async () => {
+  if (!sessionId) return;
+  toast('Merging transcripts…', 7000);
+  try {
+    const res  = await fetch(`/api/session/${sessionId}/merge`, { method: 'POST' });
+    const data = await res.json();
+    toast(`✅ Merged ${data.total} turns`);
+    lastMerged = data;
+    document.getElementById('btnDownload').disabled = false;
+  } catch(e) { toast('❌ Merge failed'); }
+});
+
+// ── Download ─────────────────────────────────────────────────────────────────
+document.getElementById('btnDownload').addEventListener('click', () => {
+  if (!lastMerged) return;
+  const blob = new Blob([JSON.stringify(lastMerged.entries, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `${sessionId}_unified.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ── Clear unified ─────────────────────────────────────────────────────────────
+document.getElementById('btnClearUnified').addEventListener('click', clearUnified);
+function clearUnified() {
+  allEntries = [];
+  document.getElementById('unifiedScroll').innerHTML =
+    '<div class="unified-empty" id="unifiedEmpty">Start a session and begin recording to see the unified transcript here.</div>';
+  document.getElementById('turnCounter').textContent = '0 turns';
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+function connectWS() {
+  if (ws) { ws.onclose = null; ws.close(); }
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/${sessionId}`);
+  wsRetry = 0;
+
+  ws.onopen = () => {
+    setWsState(true);
+    // Keep-alive ping
+    clearInterval(ws._ping);
+    ws._ping = setInterval(() => ws.readyState === 1 && ws.send('ping'), 25000);
+  };
+
+  ws.onclose = () => {
+    setWsState(false);
+    if (sessionId) {
+      wsRetry++;
+      const delay = Math.min(1000 * wsRetry, 8000);
+      setTimeout(connectWS, delay);
+    }
+  };
+
+  ws.onerror = () => setWsState(false, true);
+
+  ws.onmessage = (evt) => {
+    const msg = JSON.parse(evt.data);
+    handleWsMessage(msg);
+  };
+}
+
+function setWsState(ok, err = false) {
+  const dot   = document.getElementById('wsDot');
+  const label = document.getElementById('wsLabel');
+  dot.className   = 'ws-dot' + (ok ? ' connected' : err ? ' error' : '');
+  label.textContent = ok ? 'Live' : err ? 'Error' : 'Reconnecting…';
+}
+
+// ── WebSocket message router ──────────────────────────────────────────────────
+function handleWsMessage(msg) {
+  switch (msg.type) {
+    case 'hello':
+      colors = msg.colors || colors;
+      break;
+
+    case 'result':
+      appendUtterance(msg);
+      appendToUnified(msg);
+      break;
+
+    case 'partial':
+      showPartial(msg.speaker, msg.text);
+      break;
+
+    case 'status':
+      handleStatus(msg);
+      break;
+
+    case 'merged':
+      rebuildUnifiedFromMerge(msg.entries);
+      break;
+
+    default: break;
+  }
+}
+
+// ── Status events ─────────────────────────────────────────────────────────────
+function handleStatus(msg) {
+  const { speaker, event } = msg;
+  switch (event) {
+    case 'connected':  setStatus(speaker, 'Connected');  break;
+    case 'started':    setStatus(speaker, '● REC');  setRecording(speaker, true);  break;
+    case 'stopped':    setStatus(speaker, 'Idle');   setRecording(speaker, false); break;
+    case 'speech_start': setStatus(speaker, '🔊 Speaking'); break;
+    case 'speech_end':   setStatus(speaker, '● REC');       break;
+    case 'error':      setStatus(speaker, '⚠ Error');  toast(`${speaker}: ${msg.text}`); break;
+    case 'partial':    showPartial(speaker, msg.text); break;
+    default: break;
+  }
+}
+
+function setStatus(role, text) {
+  const el = document.getElementById(`status-${role}`);
+  if (el) el.textContent = text;
+}
+
+function setRecording(role, active) {
+  const panel = document.getElementById(`panel-${role}`);
+  if (panel) panel.classList.toggle('recording', active);
+}
+
+// ── Partial live text ─────────────────────────────────────────────────────────
+function showPartial(role, text) {
+  const el = document.getElementById(`partial-${role}`);
+  if (!el) return;
+  el.textContent = text;
+  el.style.display = 'block';
+}
+
+// ── Append final utterance to speaker panel ───────────────────────────────────
+function appendUtterance(entry) {
+  const role = entry.speaker;
+  const box  = document.getElementById(`transcript-${role}`);
+  if (!box) return;
+
+  // Clear partial
+  const partial = document.getElementById(`partial-${role}`);
+  if (partial) partial.textContent = '';
+
+  const ts   = formatTime(entry.utc_iso);
+  const dur  = entry.duration_sec ? `${entry.duration_sec.toFixed(1)}s` : '';
+
+  const el = document.createElement('div');
+  el.className = 'utterance';
+  el.innerHTML = `
+    <div class="ts">${ts}  ${dur ? `· ${dur}` : ''}</div>
+    <div class="words">${escHtml(entry.text)}</div>
+  `;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ── Unified timeline ──────────────────────────────────────────────────────────
+function appendToUnified(entry) {
+  allEntries.push(entry);
+  // Sort by time (in case of slight out-of-order delivery)
+  allEntries.sort((a, b) => a.utc_iso < b.utc_iso ? -1 : 1);
+
+  const container = document.getElementById('unifiedScroll');
+  const empty = document.getElementById('unifiedEmpty');
+  if (empty) empty.remove();
+
+  // Find if an element for this entry already exists
+  const existing = container.querySelector(`[data-utc="${entry.utc_iso}"]`);
+  if (existing) return;
+
+  // Re-render all to keep sort order (entries are few in a PoC)
+  renderUnified();
+}
+
+function rebuildUnifiedFromMerge(entries) {
+  allEntries = entries;
+  renderUnified();
+  toast(`Unified transcript: ${entries.length} turns`);
+}
+
+function renderUnified() {
+  const container = document.getElementById('unifiedScroll');
+  container.innerHTML = '';
+
+  for (let i = 0; i < allEntries.length; i++) {
+    const entry = allEntries[i];
+    const color = colors[entry.speaker] || '#888';
+    const row   = document.createElement('div');
+    row.className = 'timeline-entry';
+    row.dataset.utc = entry.utc_iso;
+    row.innerHTML = `
+      <span class="tl-turn">#${i + 1}</span>
+      <span class="tl-ts">${formatTime(entry.utc_iso)}</span>
+      <span class="tl-speaker" style="color:${color}">${entry.speaker}</span>
+      <span class="tl-text">${escHtml(entry.text)}</span>
+    `;
+    container.appendChild(row);
+  }
+
+  container.scrollTop = container.scrollHeight;
+  document.getElementById('turnCounter').textContent = `${allEntries.length} turns`;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function formatTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('en-GB', { hour12: false,
+    hour: '2-digit', minute: '2-digit', second: '2-digit' }) +
+    '.' + String(d.getMilliseconds()).padStart(3, '0');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function enableStartButtons() {
+  for (const sp of SPEAKERS) {
+    const btn = document.getElementById(`btnStart-${sp.role}`);
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+buildPanels();
+</script>
+</body>
+</html>

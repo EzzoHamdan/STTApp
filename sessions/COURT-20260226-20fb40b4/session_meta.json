@@ -1,0 +1,11 @@
+{
+  "session_id": "COURT-20260226-20fb40b4",
+  "created_utc": "2026-02-26T12:48:06.770509+00:00",
+  "speakers": [
+    "Judge",
+    "Lawyer_1",
+    "Lawyer_2"
+  ],
+  "status": "active",
+  "ended_utc": null
+}
