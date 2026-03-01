@@ -23,6 +23,7 @@
       --lawyer2-dim: #1a5a35;
       --danger:      #f85149;
       --success:     #56d364;
+      --overlap:     #f0883e;
       --radius:      8px;
     }
 
@@ -327,10 +328,67 @@
       min-width: 80px;
     }
 
-    .tl-text { font-size: 14px; line-height: 1.4; }
+    .tl-text { font-size: 14px; line-height: 1.4; flex: 1; }
 
-    .unified-empty {
-      text-align: center;
+    /* Overlap badge on timeline entries */
+    .timeline-entry.has-overlap {
+      background: color-mix(in srgb, var(--overlap) 6%, transparent);
+      border-left: 2px solid var(--overlap);
+      padding-left: 8px;
+    }
+    .timeline-entry.has-overlap:hover {
+      background: color-mix(in srgb, var(--overlap) 12%, var(--bg3));
+    }
+
+    .overlap-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--overlap);
+      background: color-mix(in srgb, var(--overlap) 15%, transparent);
+      border: 1px solid color-mix(in srgb, var(--overlap) 40%, transparent);
+      border-radius: 8px;
+      padding: 1px 6px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* Overlap summary panel */
+    .overlap-summary {
+      border-top: 1px solid var(--border);
+      padding: 12px 18px;
+      background: color-mix(in srgb, var(--overlap) 4%, var(--bg2));
+    }
+    .overlap-summary-head {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--overlap);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .overlap-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .overlap-window {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      font-size: 12px;
+      padding: 4px 8px;
+      background: var(--bg3);
+      border-radius: 6px;
+      border-left: 2px solid var(--overlap);
+    }
+    .ow-idx  { color: var(--text-dim); min-width: 20px; font-family: 'Consolas', monospace; }
+    .ow-time { color: var(--text-dim); font-family: 'Consolas', monospace; min-width: 160px; }
+    .ow-dur  { color: var(--text-dim); min-width: 50px; }
+    .ow-spk  { color: var(--overlap);  font-weight: 600; }
       color: var(--text-dim);
       padding: 40px 0;
       font-size: 13px;
@@ -407,6 +465,10 @@
     <div class="unified-scroll" id="unifiedScroll">
       <div class="unified-empty" id="unifiedEmpty">Start a session and begin recording to see the unified transcript here.</div>
     </div>
+    <div class="overlap-summary" id="overlapSummary" style="display:none">
+      <div class="overlap-summary-head">⚡ Simultaneous Speech Detected — <span id="overlapCount"></span></div>
+      <div class="overlap-list" id="overlapList"></div>
+    </div>
   </section>
 </main>
 
@@ -427,6 +489,7 @@ let wsRetry    = 0;
 let colors     = {};
 let allEntries = [];        // live accumulated entries for unified view
 let lastMerged = null;      // last merged JSON from server
+let overlapWindows = [];    // overlap windows from last merge
 
 // ── Toast helper ─────────────────────────────────────────────────────────────
 let toastTimer;
@@ -488,6 +551,7 @@ document.getElementById('btnNew').addEventListener('click', async () => {
     colors    = data.colors;
     allEntries = [];
     lastMerged = null;
+    overlapWindows = [];
     updateSessionBadge();
     buildPanels();
     clearUnified();
@@ -568,9 +632,12 @@ document.getElementById('btnDownload').addEventListener('click', () => {
 document.getElementById('btnClearUnified').addEventListener('click', clearUnified);
 function clearUnified() {
   allEntries = [];
+  overlapWindows = [];
   document.getElementById('unifiedScroll').innerHTML =
     '<div class="unified-empty" id="unifiedEmpty">Start a session and begin recording to see the unified transcript here.</div>';
   document.getElementById('turnCounter').textContent = '0 turns';
+  const summ = document.getElementById('overlapSummary');
+  if (summ) summ.style.display = 'none';
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
@@ -632,7 +699,7 @@ function handleWsMessage(msg) {
       break;
 
     case 'merged':
-      rebuildUnifiedFromMerge(msg.entries);
+      rebuildUnifiedFromMerge(msg.entries, msg.overlaps);
       break;
 
     default: break;
@@ -713,10 +780,15 @@ function appendToUnified(entry) {
   renderUnified();
 }
 
-function rebuildUnifiedFromMerge(entries) {
-  allEntries = entries;
+function rebuildUnifiedFromMerge(entries, overlaps) {
+  allEntries     = entries;
+  overlapWindows = overlaps || [];
   renderUnified();
-  toast(`Unified transcript: ${entries.length} turns`);
+  renderOverlapSummary(overlapWindows);
+  const extra = overlapWindows.length
+    ? `  ⚡ ${overlapWindows.length} overlap period(s)`
+    : '';
+  toast(`Unified transcript: ${entries.length} turns${extra}`);
 }
 
 function renderUnified() {
@@ -727,19 +799,52 @@ function renderUnified() {
     const entry = allEntries[i];
     const color = colors[entry.speaker] || '#888';
     const row   = document.createElement('div');
-    row.className = 'timeline-entry';
+    row.className = 'timeline-entry' + (entry.overlap ? ' has-overlap' : '');
     row.dataset.utc = entry.utc_iso;
+
+    const overlapBadge = entry.overlap
+      ? `<span class="overlap-badge" title="Simultaneous with ${(entry.overlap_with || []).join(', ')}">⚡ ${(entry.overlap_with || []).join(' + ')}</span>`
+      : '';
+
     row.innerHTML = `
       <span class="tl-turn">#${i + 1}</span>
       <span class="tl-ts">${formatTime(entry.utc_iso)}</span>
       <span class="tl-speaker" style="color:${color}">${entry.speaker}</span>
       <span class="tl-text">${escHtml(entry.text)}</span>
+      ${overlapBadge}
     `;
     container.appendChild(row);
   }
 
   container.scrollTop = container.scrollHeight;
   document.getElementById('turnCounter').textContent = `${allEntries.length} turns`;
+}
+
+// ── Overlap summary panel ──────────────────────────────────────────────────
+function renderOverlapSummary(overlaps) {
+  const summ = document.getElementById('overlapSummary');
+  const list = document.getElementById('overlapList');
+  const cnt  = document.getElementById('overlapCount');
+  if (!overlaps || overlaps.length === 0) {
+    summ.style.display = 'none';
+    return;
+  }
+  cnt.textContent = `${overlaps.length} period${overlaps.length !== 1 ? 's' : ''}`;
+  list.innerHTML = '';
+  overlaps.forEach((w, i) => {
+    const startT = formatTime(w.start_iso);
+    const endT   = formatTime(w.end_iso);
+    const item   = document.createElement('div');
+    item.className = 'overlap-window';
+    item.innerHTML = `
+      <span class="ow-idx">${i + 1}</span>
+      <span class="ow-time">${startT} → ${endT}</span>
+      <span class="ow-dur">${w.duration_sec}s</span>
+      <span class="ow-spk">${w.speakers.join(' + ')}</span>
+    `;
+    list.appendChild(item);
+  });
+  summ.style.display = 'block';
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

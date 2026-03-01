@@ -28,6 +28,7 @@ import asyncio
 import json
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Set
 
@@ -59,6 +60,10 @@ _ws_clients: Dict[str, Set[WebSocket]] = {}
 
 # session_id → role → LiveTranscriber instance
 _active_transcribers: Dict[str, Dict[str, LiveTranscriber]] = {}
+
+# Real-time overlap tracking: session_id → speaker → (start_dt, end_dt)
+# Keeps the most-recently-completed utterance window per speaker.
+_last_utterance_windows: Dict[str, Dict[str, tuple]] = {}
 
 STATIC_DIR = Path(__file__).parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
@@ -115,7 +120,32 @@ def _threadsafe_broadcast(session_id: str, message: dict):
 # ---------------------------------------------------------------------------
 def _make_result_callback(session_id: str):
     def on_result(entry: dict):
-        msg = {**entry, "type": "result"}
+        # ── Real-time overlap detection ────────────────────────────────
+        # utc_iso is when Azure returned the result ≈ end of utterance.
+        # Start ≈ end − duration_sec.
+        speaker = entry["speaker"]
+        end_dt  = datetime.fromisoformat(entry["utc_iso"])
+        dur     = float(entry.get("duration_sec") or 0)
+        start_dt = end_dt - timedelta(seconds=dur)
+
+        windows = _last_utterance_windows.setdefault(session_id, {})
+        overlap_with = []
+        for other_speaker, (o_start, o_end) in windows.items():
+            if other_speaker == speaker:
+                continue
+            # Intervals overlap if start_i < end_j AND start_j < end_i
+            if start_dt < o_end and o_start < end_dt:
+                overlap_with.append(other_speaker)
+
+        # Update window for this speaker
+        windows[speaker] = (start_dt, end_dt)
+
+        msg = {
+            **entry,
+            "type":         "result",
+            "overlap":       bool(overlap_with),
+            "overlap_with":  sorted(overlap_with),
+        }
         _threadsafe_broadcast(session_id, msg)
     return on_result
 
@@ -203,26 +233,32 @@ async def stop_speaker(session_id: str, role: str):
 @app.post("/api/session/{session_id}/merge")
 async def merge_session(session_id: str, mark_ended: bool = False):
     def _do_merge():
-        entries = merge(session_id)
+        entries, overlaps = merge(session_id)
         if not entries:
-            return []
+            return [], []
         session_dir = get_session_dir(session_id)
-        write_unified_json(entries, session_dir)
-        write_unified_text(entries, session_id, session_dir)
+        write_unified_json(entries, session_dir, overlaps, session_id)
+        write_unified_text(entries, session_id, session_dir, overlaps)
         if mark_ended:
             end_session(session_id)
-        return entries
+        return entries, overlaps
 
-    entries = await asyncio.get_event_loop().run_in_executor(None, _do_merge)
+    entries, overlaps = await asyncio.get_event_loop().run_in_executor(None, _do_merge)
 
-    # Broadcast the full merged timeline to all clients
+    # Broadcast the full merged timeline (+ overlaps) to all clients
     await _ws_broadcast(session_id, {
-        "type": "merged",
+        "type":     "merged",
         "session_id": session_id,
-        "entries": entries,
-        "total": len(entries),
+        "entries":  entries,
+        "overlaps": overlaps,
+        "total":    len(entries),
     })
-    return {"status": "merged", "total": len(entries), "entries": entries}
+    return {
+        "status":   "merged",
+        "total":    len(entries),
+        "overlaps": overlaps,
+        "entries":  entries,
+    }
 
 
 @app.get("/api/session/{session_id}/status")

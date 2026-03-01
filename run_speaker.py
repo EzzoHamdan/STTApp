@@ -102,6 +102,8 @@ def main():
     finally:
         transcriber.stop()
         console.print(f"[green]Transcript saved → {transcriber.transcript_path}[/green]")
+        if transcriber.audio_path:
+            console.print(f"[blue]Audio backup  → {transcriber.audio_path}[/blue]")
 
 
 if __name__ == "__main__":
