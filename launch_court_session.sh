@@ -20,9 +20,10 @@ source .venv/bin/activate
 
 # ── Generate session ID ───────────────────────────────────────────────────────
 SESSION_ID=$(python -c "
-from session_manager import generate_session_id, init_session
-sid = generate_session_id()
-init_session(sid, ['Judge','Lawyer_1','Lawyer_2'])
+from court_stt.session import SessionManager
+mgr = SessionManager()
+sid = mgr.generate_id()
+mgr.init_session(sid, ['Judge','Lawyer_1','Lawyer_2'])
 print(sid)
 ")
 
@@ -38,7 +39,7 @@ echo "$SESSION_ID" > "$SCRIPT_DIR/last_session_id.txt"
 # ── Open terminals per OS ─────────────────────────────────────────────────────
 open_terminal() {
     local ROLE="$1"
-    local CMD="source '$SCRIPT_DIR/.venv/bin/activate' && python '$SCRIPT_DIR/run_speaker.py' --role $ROLE --session $SESSION_ID; exec bash"
+    local CMD="source '$SCRIPT_DIR/.venv/bin/activate' && court-stt-speaker --role $ROLE --session $SESSION_ID; exec bash"
 
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS — use AppleScript to open a new Terminal tab
@@ -54,7 +55,7 @@ EOF
         xterm -title "$ROLE - $SESSION_ID" -e bash -c "$CMD" &
     else
         echo "  Cannot open terminal window for $ROLE. Run manually:"
-        echo "    source .venv/bin/activate && python run_speaker.py --role $ROLE --session $SESSION_ID"
+        echo "    source .venv/bin/activate && court-stt-speaker --role $ROLE --session $SESSION_ID"
     fi
     sleep 1
 }
@@ -69,5 +70,5 @@ echo "  All 3 speaker windows launched."
 echo "  Session ID: $SESSION_ID   (also saved in last_session_id.txt)"
 echo ""
 echo "  When done, stop each window (Ctrl+C) then merge:"
-echo "    python merge_transcripts.py --session $SESSION_ID --end"
+echo "    court-stt-merge --session $SESSION_ID --end"
 echo ""

@@ -13,7 +13,7 @@
 Set-Location $PSScriptRoot
 
 # Generate session ID
-$sessionId = python -c "from session_manager import generate_session_id, init_session; sid=generate_session_id(); init_session(sid, ['Judge','Lawyer_1','Lawyer_2']); print(sid)"
+$sessionId = python -c "from court_stt.session import SessionManager; mgr=SessionManager(); sid=mgr.generate_id(); mgr.init_session(sid, ['Judge','Lawyer_1','Lawyer_2']); print(sid)"
 
 Write-Host ""
 Write-Host "  ================================================" -ForegroundColor Cyan
@@ -25,7 +25,7 @@ $roles = @("Judge", "Lawyer_1", "Lawyer_2")
 
 foreach ($role in $roles) {
     $title = "$role - $sessionId"
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$PSScriptRoot'; python run_speaker.py --role $role --session $sessionId" -WindowStyle Normal
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", "Set-Location '$PSScriptRoot'; court-stt-speaker --role $role --session $sessionId" -WindowStyle Normal
     Write-Host "  Started: $role" -ForegroundColor Yellow
     Start-Sleep -Seconds 2
 }
@@ -34,7 +34,7 @@ Write-Host ""
 Write-Host "  All speakers launched!" -ForegroundColor Green
 Write-Host ""
 Write-Host "  When finished, stop each window (Ctrl+C) then run:" -ForegroundColor White
-Write-Host "    python merge_transcripts.py --session $sessionId --end" -ForegroundColor Cyan
+Write-Host "    court-stt-merge --session $sessionId --end" -ForegroundColor Cyan
 Write-Host ""
 
 # Save session ID for convenience

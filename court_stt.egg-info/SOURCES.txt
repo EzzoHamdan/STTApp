@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+court_stt/__init__.py
+court_stt/cli.py
+court_stt/config.py
+court_stt/merge.py
+court_stt/server.py
+court_stt/session.py
+court_stt/transcriber.py
+court_stt.egg-info/PKG-INFO
+court_stt.egg-info/SOURCES.txt
+court_stt.egg-info/dependency_links.txt
+court_stt.egg-info/entry_points.txt
+court_stt.egg-info/requires.txt
+court_stt.egg-info/top_level.txt
+court_stt/static/index.html
