@@ -326,6 +326,7 @@ export default function CourtView() {
                 status={sp.status}
                 transcripts={sp.transcripts}
                 partial={sp.partial}
+                error={sp.error}
                 isSessionActive={!!court.sessionId}
                 onStart={() => handleStartSpeaker(role)}
                 onStop={() => handleStopSpeaker(role)}

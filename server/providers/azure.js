@@ -30,6 +30,8 @@ export function createAzureSession(sessionId, speaker, env, callbacks) {
   const format = sdk.AudioStreamFormat.getWaveFormatPCM(16000, 16, 1);
   const pushStream = sdk.AudioInputStream.createPushStream(format);
   const audioConfig = sdk.AudioConfig.fromStreamInput(pushStream);
+  let audioChunkCount = 0;
+  let totalAudioBytes = 0;
 
   const speechConfig = sdk.SpeechConfig.fromSubscription(key, region);
   speechConfig.speechRecognitionLanguage = language;
@@ -42,6 +44,7 @@ export function createAzureSession(sessionId, speaker, env, callbacks) {
   // ── Azure event handlers ────────────────────────────────────────
 
   recognizer.recognized = (_, e) => {
+    console.log(`[Azure/${speaker}] recognized event — reason: ${e.result.reason}, text: "${e.result.text || ''}", chunks so far: ${audioChunkCount}, bytes: ${totalAudioBytes}`);
     if (stopped) return;
     if (e.result.reason === sdk.ResultReason.RecognizedSpeech && e.result.text) {
       const offsetTicks = Number(e.result.offset);
@@ -63,11 +66,13 @@ export function createAzureSession(sessionId, speaker, env, callbacks) {
   recognizer.recognizing = (_, e) => {
     if (stopped) return;
     if (e.result.text) {
+      console.log(`[Azure/${speaker}] recognizing (partial): "${e.result.text.slice(0, 60)}"`);
       callbacks.onPartial(e.result.text);
     }
   };
 
   recognizer.canceled = (_, e) => {
+    console.warn(`[Azure/${speaker}] Canceled — reason: ${e.reason}, errorCode: ${e.errorCode}, details: ${e.errorDetails || 'none'}`);
     if (e.reason === sdk.CancellationReason.Error) {
       console.error(`[Azure/${speaker}] Error: ${e.errorDetails}`);
       callbacks.onError(e.errorDetails);
@@ -106,7 +111,18 @@ export function createAzureSession(sessionId, speaker, env, callbacks) {
      */
     sendAudio(buffer) {
       if (!stopped) {
-        pushStream.write(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer));
+        // Convert Node Buffer → ArrayBuffer (SDK expects ArrayBuffer, not Buffer)
+        const nodeBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+        const arrayBuffer = nodeBuffer.buffer.slice(
+          nodeBuffer.byteOffset,
+          nodeBuffer.byteOffset + nodeBuffer.byteLength
+        );
+        pushStream.write(arrayBuffer);
+        audioChunkCount++;
+        totalAudioBytes += arrayBuffer.byteLength;
+        if (audioChunkCount % 50 === 1) {
+          console.log(`[Azure/${speaker}] Audio chunk #${audioChunkCount}, total ${totalAudioBytes} bytes`);
+        }
       }
     },
 

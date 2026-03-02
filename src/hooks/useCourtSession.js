@@ -119,6 +119,7 @@ export function useCourtSession() {
         break;
 
       case 'status':
+        console.log(`[Court WS] status: speaker=${msg.speaker} event=${msg.event} text=${msg.text}`);
         handleStatusEvent(msg);
         break;
 
@@ -154,7 +155,8 @@ export function useCourtSession() {
       case 'speech_end':
         break;
       case 'error':
-        updateSpeaker(speaker, { status: 'idle' });
+        console.error(`[Court] Azure error for ${speaker}: ${msg.text}`);
+        updateSpeaker(speaker, { status: 'error', error: msg.text || 'Unknown error' });
         break;
       case 'partial':
         updateSpeaker(speaker, { partial: msg.text });

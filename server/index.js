@@ -316,11 +316,20 @@ server.on('upgrade', (request, socket, head) => {
         });
       }
 
+      let courtAudioChunks = 0;
       ws.on('message', (data, isBinary) => {
         if (isBinary) {
           // Route binary audio to the active speaker's Azure recognizer
           if (activeSpeaker && session.transcribers.has(activeSpeaker)) {
             session.transcribers.get(activeSpeaker).sendAudio(data);
+            courtAudioChunks++;
+            if (courtAudioChunks % 100 === 1) {
+              console.log(`[Court] Audio chunk #${courtAudioChunks} → ${activeSpeaker} (${data.length} bytes)`);
+            }
+          } else {
+            if (courtAudioChunks === 0) {
+              console.warn(`[Court] Binary audio received but NOT routed — activeSpeaker=${activeSpeaker}, has transcriber=${session.transcribers.has(activeSpeaker || '')}`);
+            }
           }
           return;
         }

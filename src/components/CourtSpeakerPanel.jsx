@@ -12,9 +12,10 @@ const SPEAKER_STYLES = {
  */
 export default function CourtSpeakerPanel({
   role,
-  status,         // 'idle' | 'connecting' | 'recording' | 'stopped'
+  status,         // 'idle' | 'connecting' | 'recording' | 'stopped' | 'error'
   transcripts,    // [{ text, utc_iso, duration_sec }]
   partial,        // current interim text
+  error,          // error text from Azure
   isSessionActive,
   onStart,
   onStop,
@@ -99,6 +100,8 @@ export default function CourtSpeakerPanel({
             ? '● REC'
             : status === 'connecting'
             ? 'Connecting…'
+            : status === 'error'
+            ? '⚠ Error'
             : 'Idle'}
         </span>
       </div>
@@ -164,7 +167,25 @@ export default function CourtSpeakerPanel({
           gap: 8,
         }}
       >
-        {transcripts.length === 0 && !partial && (
+        {error && (
+          <div
+            style={{
+              background: '#ef444418',
+              border: '1px solid #ef444440',
+              borderRadius: 6,
+              padding: '8px 12px',
+              fontSize: 11,
+              color: '#fca5a5',
+              fontFamily: 'Space Mono, monospace',
+              direction: 'ltr',
+              textAlign: 'left',
+              wordBreak: 'break-word',
+            }}
+          >
+            ⚠ {error}
+          </div>
+        )}
+        {transcripts.length === 0 && !partial && !error && (
           <div
             style={{
               textAlign: 'center',

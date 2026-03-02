@@ -86,7 +86,13 @@ export function createAzureArenaSession(clientWs, env) {
 
     sendAudio(buffer) {
       if (!stopped && pushStream) {
-        pushStream.write(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer));
+        // Convert Node Buffer → ArrayBuffer (SDK expects ArrayBuffer, not Buffer)
+        const nodeBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+        const arrayBuffer = nodeBuffer.buffer.slice(
+          nodeBuffer.byteOffset,
+          nodeBuffer.byteOffset + nodeBuffer.byteLength
+        );
+        pushStream.write(arrayBuffer);
       }
     },
 
