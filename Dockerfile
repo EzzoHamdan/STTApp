@@ -1,26 +1,32 @@
-FROM python:3.12-slim
-
-# System dependencies for Azure Speech SDK and sounddevice
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libssl-dev \
-    libasound2 \
-    libportaudio2 \
-    portaudio19-dev \
-    && rm -rf /var/lib/apt/lists/*
+# ── Build stage ──────────────────────────────────────────────────────
+FROM node:20-slim AS build
 
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
 
-# Copy package definition first (better layer caching)
-COPY pyproject.toml README.md ./
-COPY court_stt/ court_stt/
+# ── Production stage ─────────────────────────────────────────────────
+FROM node:20-slim
 
-# Install the package
-RUN pip install --no-cache-dir .
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Install production dependencies only
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Copy server code + built frontend
+COPY server/ server/
+COPY --from=build /app/dist dist/
 
 # Create sessions directory
 RUN mkdir -p sessions
 
-EXPOSE 8000
+EXPOSE 3001
 
-CMD ["court-stt-server", "--host", "0.0.0.0", "--port", "8000"]
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD node -e "fetch('http://localhost:3001/api/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"
+
+CMD ["node", "server/index.js"]

@@ -1,0 +1,36 @@
+# ── Render.com Blueprint ──────────────────────────────────────────
+# Connect this repo to Render, and it will auto-detect this file.
+# Free tier supports WebSockets natively — perfect for this app.
+
+services:
+  - type: web
+    name: arabic-stt-platform
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: node server/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      # STT Provider Keys — set these in Render dashboard (not here)
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: MUNSIT_API_KEY
+        sync: false
+      - key: SONIOX_API_KEY
+        sync: false
+      - key: SPEECHMATICS_API_KEY
+        sync: false
+      - key: AZURE_SPEECH_KEY
+        sync: false
+      - key: AZURE_SPEECH_REGION
+        value: eastus
+      - key: AZURE_SPEECH_LANGUAGE
+        value: ar-JO
+      # Access restriction (optional)
+      - key: ACCESS_CODE
+        sync: false
+    healthCheckPath: /api/health
+    autoDeploy: true

@@ -1,352 +1,130 @@
-# Court Speech-to-Text
+﻿# Arabic STT Platform
 
-Real-time multi-speaker court transcription using **Azure Speech Services**.
+Unified real-time Arabic speech-to-text platform with two modes:
 
-Installable Python package with CLI tools, reusable library modules, and a web UI.
+- **Court Transcription** â€” Multi-speaker court recording with Azure Speech Services, unified timeline, and overlap detection
+- **STT Arena** â€” Side-by-side comparison of 4 Arabic STT providers (Deepgram, Munsit, Soniox, Speechmatics)
+
+Built with React + Vite (frontend) and Express + WebSocket (backend).
 
 ## Project Structure
 
 ```
-court_stt/                  ← Installable Python package
-    __init__.py
-    config.py               ← Centralised settings (reads .env once)
-    session.py              ← Session lifecycle (SessionManager class)
-    transcriber.py          ← Real-time STT + WAV recording (LiveTranscriber class)
-    merge.py                ← Transcript merge + overlap detection (TranscriptMerger class)
-    server.py               ← FastAPI application factory (create_app)
-    cli.py                  ← CLI entry points
-    static/
-        index.html          ← Web UI
-pyproject.toml              ← Package metadata, dependencies, CLI scripts
-Dockerfile                  ← Container deployment
-.env.example                ← Environment variable template
-requirements.txt            ← Pip-installable dependency list
-launch_court_session.*      ← Multi-terminal session launchers (bat/ps1/sh)
+server/                     â† Express + WebSocket backend
+  index.js                  â† Main server (REST + WS endpoints)
+  providers/
+    azure.js                â† Azure Speech continuous recognition
+    deepgram.js             â† Deepgram Nova-3 streaming
+    munsit.js               â† Munsit REST batch
+    soniox.js               â† Soniox streaming
+    speechmatics.js         â† Speechmatics RT streaming
+  court/
+    sessions.js             â† Session lifecycle & JSONL persistence
+    merger.js               â† Multi-speaker transcript merge + overlap detection
+src/                        â† React SPA
+  App.jsx                   â† Tab navigation (Court / Arena)
+  pages/
+    CourtView.jsx           â† Court transcription UI
+    ArenaView.jsx           â† 4-provider comparison UI
+  components/               â† Shared UI components
+  hooks/                    â† Audio capture, STT WebSocket, court session hooks
+index.html                  â† SPA entry point
+vite.config.js              â† Vite config with dev proxy
+Dockerfile                  â† Multi-stage production Docker build
+.env.example                â† Environment variable template
 ```
 
-## Installation
+## Quick Start
+
+### Prerequisites
+
+- Node.js 18+
+- At least one API key (Azure for Court, any provider for Arena)
+
+### Setup
 
 ```bash
-# Clone and install as an editable package
-git clone <repo-url> && cd STTApp
-python -m venv .venv
-# Windows:   .venv\Scripts\Activate.ps1
-# Linux/Mac: source .venv/bin/activate
-pip install -e .
+git clone <repo-url> && cd court-transcription
+npm install
+cp .env.example .env       # Edit .env with your API keys
 ```
 
-Or use the one-command setup scripts:
-
-```powershell
-# Windows
-.\setup.ps1
-
-# macOS / Linux
-chmod +x setup.sh && ./setup.sh
-```
-
-## Configuration
-
-Copy `.env.example` to `.env` and fill in your Azure credentials:
-
-```env
-AZURE_SPEECH_KEY=your_key_here
-AZURE_SPEECH_REGION=uaenorth
-AZURE_SPEECH_LANGUAGE=ar-JO
-```
-
-All settings are centralised in `court_stt.config.Settings` and read once from environment.  See `.env.example` for all available options.
-
-## CLI Commands
-
-After `pip install -e .`, these commands are available:
-
-| Command | Description |
-|---|---|
-| `court-stt-server` | Start the FastAPI web server |
-| `court-stt-speaker --role Judge` | Record a single speaker transcription |
-| `court-stt-merge --session COURT-... --end` | Merge transcripts for a session |
-| `court-stt-test-mic` | Quick microphone + Azure diagnostic |
-
-### Start the web server
+### Development
 
 ```bash
-court-stt-server                      # default host/port from .env
-court-stt-server --host 127.0.0.1 --port 9000
+npm run dev                 # Starts server + Vite dev server
 ```
 
-Then open [http://localhost:8000](http://localhost:8000).
+Open [http://localhost:5173](http://localhost:5173).
 
-### Single speaker recording
+### Production
 
 ```bash
-court-stt-speaker --role Judge                              # new session
-court-stt-speaker --role Lawyer_1 --session COURT-20260226-a3f7b1c2  # join existing
+npm run build               # Build the React frontend
+npm start                   # Serve everything from Express
 ```
 
-### Multi-speaker session
-
-```powershell
-.\launch_court_session.ps1   # Opens 3 terminal windows
-```
-
-### Merge transcripts
+Or with Docker:
 
 ```bash
-court-stt-merge --session COURT-20260226-a3f7b1c2 --end
+docker build -t arabic-stt .
+docker run -p 3001:3001 --env-file .env arabic-stt
 ```
 
-## Using as a Library
+Open [http://localhost:3001](http://localhost:3001).
 
-Each module is independently importable with no side effects:
+## API Keys
 
-### SessionManager
+| Provider | Purpose | Sign up |
+|---|---|---|
+| **Azure Speech** | Court transcription (required) | [portal.azure.com](https://portal.azure.com) |
+| Deepgram Nova-3 | Arena provider | [console.deepgram.com](https://console.deepgram.com) |
+| Munsit | Arena provider | [app.cntxt.tools](https://app.cntxt.tools) |
+| Soniox | Arena provider | [soniox.com](https://soniox.com) |
+| Speechmatics | Arena provider | [portal.speechmatics.com](https://portal.speechmatics.com) |
 
-```python
-from court_stt.session import SessionManager
+Set keys in `.env` (persistent) or via the Arena UI's key settings (session-only).
 
-mgr = SessionManager(sessions_dir=Path("./my_sessions"))
-sid = mgr.generate_id()
-meta = mgr.init_session(sid, ["Judge", "Lawyer_1"])
-# ... later ...
-mgr.end_session(sid)
-```
+## API Endpoints
 
-### LiveTranscriber
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/keys/status` | Which arena provider keys are configured |
+| `POST` | `/api/keys` | Update arena keys at runtime |
+| `GET` | `/api/court/keys/status` | Azure key status |
+| `POST` | `/api/court/session/new` | Create a new court session |
+| `POST` | `/api/court/session/:id/merge` | Merge & download session transcript |
+| `GET` | `/api/court/session/:id/status` | Session metadata |
+| `WS` | `/ws/{provider}` | Arena streaming (deepgram, munsit, soniox, speechmatics) |
+| `WS` | `/ws/court/{sessionId}` | Court live transcription |
 
-```python
-from court_stt.config import Settings
-from court_stt.transcriber import LiveTranscriber
+## Environment Variables
 
-cfg = Settings.from_env()
-t = LiveTranscriber(
-    session_id="MY-SESSION",
-    speaker="Speaker_1",
-    session_dir=Path("./output"),
-    settings=cfg,
-    on_result=lambda entry: print(entry["text"]),
-)
-t.start()
-# ... record ...
-t.stop()
-print(t.entries)
-```
+See [.env.example](.env.example) for the full list. Key variables:
 
-### TranscriptMerger
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `AZURE_SPEECH_KEY` | For Court mode | â€” | Azure Speech Services key |
+| `AZURE_SPEECH_REGION` | For Court mode | `eastus` | Azure region |
+| `AZURE_SPEECH_LANGUAGE` | No | `ar-JO` | Recognition language |
+| `PORT` | No | `3001` | Server port |
+| `NODE_ENV` | No | â€” | Set to `production` for prod builds |
+| `CORS_ORIGINS` | No | `*` (all) | Comma-separated allowed origins |
 
-```python
-from court_stt.merge import TranscriptMerger, detect_overlaps
-from court_stt.session import SessionManager
-
-mgr = SessionManager()
-merger = TranscriptMerger(session_manager=mgr)
-entries, overlaps = merger.merge_and_write("COURT-20260226-a3f7b1c2")
-
-# Or use pure functions directly (no I/O):
-from court_stt.merge import sort_and_number, detect_overlaps
-entries = sort_and_number(raw_entries)
-overlaps = detect_overlaps(entries)
-```
-
-### FastAPI Application
-
-```python
-from court_stt.config import Settings
-from court_stt.server import create_app
-
-cfg = Settings.from_env(host="127.0.0.1", port=9000)
-app = create_app(cfg)
-# Use with uvicorn, hypercorn, gunicorn, etc.
-```
-
-## Docker Deployment
-
-```bash
-docker build -t court-stt .
-docker run -p 8000:8000 --env-file .env court-stt
-```
-
-## Architecture
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                     Court Session                            │
-│                COURT-20260226-a3f7b1c2                       │
-│                                                              │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐                  │
-│  │  Judge   │   │ Lawyer_1 │   │ Lawyer_2 │  ← 3 mics        │
-│  │  (mic)   │   │  (mic)   │   │  (mic)   │                  │
-│  └────┬─────┘   └────┬─────┘   └────┬─────┘                  │
-│       │ sounddevice  │ sounddevice  │ sounddevice            │
-│       ▼              ▼              ▼                        │
-│  ┌────────────────────────────────────────┐                  │
-│  │  PushAudioInputStream (per speaker)    │ ← one mic read,  │
-│  │  ┌──────────────┐  ┌───────────────┐   │   two consumers  │
-│  │  │ Azure STT    │  │  WAV Writer   │   │                  │
-│  │  │  (online)    │  │  (local disk) │   │                  │
-│  │  └──────┬───────┘  └──────┬────────┘   │                  │
-│  └─────────┼─────────────────┼────────────┘                  │
-│            ▼                 ▼                               │
-│       <role>.jsonl      <role>_audio.wav  ← safety net       │
-│            │                 │                               │
-│            └────────┬────────┘                               │
-│                     ▼                                        │
-│          court_stt.merge (TranscriptMerger)                  │
-│                     │                                        │ 
-│                     ▼                                        │
-│          unified_transcript.json                             │
-│          unified_transcript.txt                              │
-└──────────────────────────────────────────────────────────────┘
-```
-
-## Output Structure
+## Session Output
 
 ```
 sessions/
-  COURT-20260226-a3f7b1c2/
-    session_meta.json          ← session metadata (speakers, timestamps)
-    Judge.jsonl                ← Judge's text transcript (JSONL)
-    Judge_audio.wav            ← Judge's raw 16 kHz PCM audio backup  ★ NEW
-    Lawyer_1.jsonl             ← Lawyer 1's text transcript (JSONL)
-    Lawyer_1_audio.wav         ← Lawyer 1's raw audio backup           ★ NEW
-    Lawyer_2.jsonl             ← Lawyer 2's text transcript (JSONL)
-    Lawyer_2_audio.wav         ← Lawyer 2's raw audio backup           ★ NEW
-    unified_transcript.json    ← merged transcript + overlap windows
-    unified_transcript.txt     ← human-readable transcript with ⚡ annotations
+  COURT-20260302-a3f7b1c2/
+    session_meta.json          â† Session metadata (speakers, timestamps)
+    Judge.jsonl                â† Judge's transcript (JSONL, one entry per utterance)
+    Lawyer_1.jsonl             â† Lawyer 1's transcript
+    Lawyer_2.jsonl             â† Lawyer 2's transcript
+    unified_transcript.json    â† Merged transcript + overlap windows
+    unified_transcript.txt     â† Human-readable transcript
 ```
 
-## Simultaneous Speech Detection
+## License
 
-When multiple speakers talk at the same time, the system detects these overlap periods and highlights them both in real-time and after merging.
-
-### How it works
-
-Each utterance has a known end-time (`utc_iso`) and duration (`duration_sec`), so the start time can be estimated:
-
-```
-start ≈ utc_iso − duration_sec
-end   ≈ utc_iso
-```
-
-Two utterances from **different** speakers overlap when their intervals intersect:
-
-```
-start_A < end_B  AND  start_B < end_A
-```
-
-### Two detection modes
-
-| Mode | When | How |
-|---|---|---|
-| **Real-time** | During live recording | Server compares each new result against other speakers' most-recent window; tags WS message with `overlap: true` immediately |
-| **Post-hoc** | After pressing Merge | Full pairwise scan across all entries; overlapping intervals merged into contiguous windows; more accurate |
-
-### What you see in the UI
-
-- **⚡ badge** on any timeline row where that speaker was talking simultaneously with another
-- Badge text shows which speakers overlapped, e.g. `⚡ Judge + Lawyer_1`
-- **⚡ Simultaneous Speech Detected** summary panel appears below the timeline after merging, listing every overlap window with exact `start → end` times, duration, and involved speakers
-
-### What you see in the text transcript
-
-```
-[Turn 4]  2026-02-26T10:06:52.600987+00:00  ⚡ OVERLAP with Lawyer_1
-  Judge  (offset=4.3s  dur=1.8s)
-  "لدي مرافعة."
-
-════════════════════════════════════════════════════════════════════════
-  SIMULTANEOUS SPEECH SUMMARY
-════════════════════════════════════════════════════════════════════════
-  [1] 2026-02-26T10:06:50.800987+00:00  →  2026-02-26T10:06:52.927668+00:00  (2.13s)  Speakers: Judge, Lawyer_1
-```
-
-## Audio Recording Safety Net
-
-Every speaker session now records a **lossless WAV backup** in parallel with Azure STT.  The recording starts the moment `run_speaker.py` (or the server) launches and is finalised on clean exit or Ctrl+C.
-
-### Why it matters
-
-| Failure scenario | Before | After |
-|---|---|---|  
-| Azure network outage | Audio lost forever | WAV backup intact |
-| Invalid API key / quota exhausted | Audio lost forever | WAV backup intact |
-| No-speech / no-match from Azure | Utterance silently dropped | WAV backup intact |
-| Process crash mid-session | Audio lost; JSONL may be partial | WAV intact up to crash point |
-
-### How it works
-
-`sounddevice` opens the microphone **once** at 16 kHz / 16-bit mono and feeds two consumers from the same callback:
-
-1. **Azure `PushAudioInputStream`** — continues live STT exactly as before.
-2. **WAV writer thread** — drains a thread-safe queue and writes PCM chunks directly into the WAV file, frame by frame, so even a hard kill leaves a valid (though possibly incomplete) file.
-
-### Disabling recording
-
-If you need to turn off WAV files (e.g. storage constraints), instantiate `LiveTranscriber` with `record_audio=False`:
-
-```python
-transcriber = LiveTranscriber(
-    session_id=session_id,
-    speaker=role,
-    session_dir=session_dir,
-    record_audio=False,   # skip WAV backup
-)
-```
-
-### Re-transcribing a backup
-
-Any standard tool (Azure Batch Transcription, Whisper, etc.) can consume the WAV files:
-
-```bash
-# Example: re-transcribe Judge's audio with Azure CLI batch
-az cognitiveservices account ...
-# or locally with Whisper:
-whisper sessions/COURT-20260226-a3f7b1c2/Judge_audio.wav --language ar
-```
-
-## Transcript Entry Format
-
-Each utterance in the JSONL files:
-
-```json
-{
-    "session_id":    "COURT-20260226-a3f7b1c2",
-    "speaker":       "Judge",
-    "utc_iso":       "2026-02-26T10:05:32.123456+00:00",
-    "offset_ticks":  43250000,
-    "offset_sec":    4.325,
-    "duration_sec":  2.15,
-    "text":          "الجلسة مفتوحة"
-}
-```
-
-## Key Design Decisions
-
-| Concern | Solution |
-|---|---|
-| **Unique session ID** | `COURT-<YYYYMMDD>-<8-char UUID>` — date-prefixed, UUID-suffixed, zero collision risk |
-| **Speaker isolation** | Each speaker writes to its own `.jsonl` file — no shared state, no locks |
-| **Timestamp precision** | Wall-clock UTC ISO-8601 + Azure SDK offset/duration (100ns ticks) |
-| **Collision handling** | When speakers talk simultaneously, each utterance keeps its own timestamp; the merger sorts them chronologically |
-| **Crash safety** | Each utterance is appended to JSONL immediately — partial data is never lost |
-| **Audio backup** | `sounddevice` captures 16 kHz PCM simultaneously; WAV is written incrementally so a crash mid-session still leaves a usable file |
-| **Single mic read** | `PushAudioInputStream` lets one `sounddevice` callback feed both Azure STT and the WAV writer — no double-open device conflict |
-| **Overlap detection** | Each utterance’s `[start, end]` interval (`utc_iso − duration_sec` → `utc_iso`) is compared across speakers; overlapping pairs are merged into windows and annotated in both real-time (server) and post-hoc (merge) |
-| **Arabic support** | `ar-JO` (Jordanian Arabic) configured via `.env`, easily switchable |
-
-## Files
-
-| File | Purpose |
-|---|---|
-| `court_stt/config.py` | Centralised settings — reads `.env` once, immutable dataclass |
-| `court_stt/session.py` | `SessionManager` — session IDs, metadata CRUD |
-| `court_stt/transcriber.py` | `LiveTranscriber` — Azure STT + WAV recording |
-| `court_stt/merge.py` | `TranscriptMerger` + pure overlap detection functions |
-| `court_stt/server.py` | FastAPI application factory + WebSocket |
-| `court_stt/cli.py` | CLI entry points for all commands |
-| `court_stt/static/index.html` | Live transcription web UI |
-| `pyproject.toml` | Package metadata, dependencies, CLI scripts |
-| `Dockerfile` | Container deployment |
-| `.env.example` | Azure credentials template |
-| `setup.ps1` / `setup.sh` | One-command setup (venv + deps) |
-| `launch_court_session.*` | Multi-terminal session launchers |
+Private â€” all rights reserved.

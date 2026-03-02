@@ -1,5 +1,0 @@
-[console_scripts]
-court-stt-merge = court_stt.cli:run_merge
-court-stt-server = court_stt.cli:run_server
-court-stt-speaker = court_stt.cli:run_speaker
-court-stt-test-mic = court_stt.cli:run_test_mic
