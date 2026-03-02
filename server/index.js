@@ -90,9 +90,10 @@ app.get('/api/auth/status', (_req, res) => {
 // Protect all other /api and /ws routes when ACCESS_CODE is set
 function checkAccess(req, res, next) {
   if (!ACCESS_CODE) return next();
-  // Allow auth endpoints through
-  if (req.path.startsWith('/api/auth/') || req.path === '/api/health') return next();
-  const token = req.headers['x-access-code'] || req.query.code;
+  // Allow auth and health endpoints through (req.path is relative to mount point)
+  if (req.path.startsWith('/auth/') || req.path === '/auth' || req.path === '/health') return next();
+  const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const token = bearer || req.headers['x-access-code'] || req.query.code;
   if (token === ACCESS_CODE) return next();
   res.status(403).json({ error: 'Access denied. Provide a valid access code.' });
 }
