@@ -344,30 +344,40 @@ server.on('upgrade', (request, socket, head) => {
 
             const azureSession = createAzureSession(sessionId, role, process.env, {
               onResult(entry) {
-                // Persist to JSONL
-                appendEntry(sessionId, role, entry);
+                // Persist to JSONL (non-critical — don't let it kill the broadcast)
+                try {
+                  appendEntry(sessionId, role, entry);
+                } catch (fsErr) {
+                  console.error(`[Court] appendEntry failed for ${role}:`, fsErr.message);
+                }
 
                 // Compute real-time overlap
-                const endDt = new Date(entry.utc_iso);
-                const dur = parseFloat(entry.duration_sec) || 0;
-                const startDt = new Date(endDt.getTime() - dur * 1000);
+                try {
+                  const endDt = new Date(entry.utc_iso);
+                  const dur = parseFloat(entry.duration_sec) || 0;
+                  const startDt = new Date(endDt.getTime() - dur * 1000);
 
-                const windows = session.lastUtteranceWindows;
-                const overlapWith = [];
-                for (const [otherSpeaker, [oStart, oEnd]] of windows.entries()) {
-                  if (otherSpeaker === role) continue;
-                  if (startDt < oEnd && oStart < endDt) {
-                    overlapWith.push(otherSpeaker);
+                  const windows = session.lastUtteranceWindows;
+                  const overlapWith = [];
+                  for (const [otherSpeaker, [oStart, oEnd]] of windows.entries()) {
+                    if (otherSpeaker === role) continue;
+                    if (startDt < oEnd && oStart < endDt) {
+                      overlapWith.push(otherSpeaker);
+                    }
                   }
-                }
-                windows.set(role, [startDt, endDt]);
+                  windows.set(role, [startDt, endDt]);
 
-                broadcast({
-                  ...entry,
-                  type: 'result',
-                  overlap: overlapWith.length > 0,
-                  overlap_with: overlapWith.sort(),
-                });
+                  broadcast({
+                    ...entry,
+                    type: 'result',
+                    overlap: overlapWith.length > 0,
+                    overlap_with: overlapWith.sort(),
+                  });
+                } catch (err) {
+                  console.error(`[Court] onResult broadcast failed for ${role}:`, err.message);
+                  // Still try to broadcast the raw result
+                  broadcast({ ...entry, type: 'result', overlap: false, overlap_with: [] });
+                }
               },
               onPartial(text) {
                 broadcast({ type: 'partial', speaker: role, text });

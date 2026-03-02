@@ -79,7 +79,9 @@ export function useCourtSession() {
       try {
         const msg = JSON.parse(evt.data);
         handleWSMessage(msg);
-      } catch (_) {}
+      } catch (err) {
+        console.error('[Court WS] Message handling error:', err);
+      }
     };
   }, []);
 
@@ -92,16 +94,13 @@ export function useCourtSession() {
       case 'result': {
         const entry = msg;
         // Add to speaker transcripts
-        updateSpeaker(entry.speaker, {
-          transcripts: undefined, // will be set via functional update below
-        });
         setSpeakerStates((prev) => {
           const sp = prev[entry.speaker] || { status: 'recording', transcripts: [], partial: '' };
           return {
             ...prev,
             [entry.speaker]: {
               ...sp,
-              transcripts: [...sp.transcripts, entry],
+              transcripts: [...(sp.transcripts || []), entry],
               partial: '',
             },
           };
