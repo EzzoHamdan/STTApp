@@ -292,18 +292,18 @@ server.on('upgrade', (request, socket, head) => {
       const session = courtSessions.get(sessionId);
       session.wsClients.add(ws);
 
-      // Track which speaker this connection is actively streaming for
-      let activeSpeaker = null;
+      // Track which speakers this connection is actively streaming for
+      const activeSpeakers = new Set();
 
       // Send hello with session info
       const meta = loadSessionMeta(sessionId);
-      const activeSpeakers = [...session.transcribers.keys()];
+      const currentlyRecording = [...session.transcribers.keys()];
       ws.send(
         JSON.stringify({
           type: 'hello',
           session_id: sessionId,
           meta,
-          active_speakers: activeSpeakers,
+          active_speakers: currentlyRecording,
           colors: SPEAKER_COLORS,
         })
       );
@@ -319,17 +319,21 @@ server.on('upgrade', (request, socket, head) => {
       let courtAudioChunks = 0;
       ws.on('message', (data, isBinary) => {
         if (isBinary) {
-          // Route binary audio to the active speaker's Azure recognizer
-          if (activeSpeaker && session.transcribers.has(activeSpeaker)) {
-            session.transcribers.get(activeSpeaker).sendAudio(data);
+          // Route binary audio to ALL active speakers' Azure recognizers
+          let routed = 0;
+          for (const speaker of activeSpeakers) {
+            if (session.transcribers.has(speaker)) {
+              session.transcribers.get(speaker).sendAudio(data);
+              routed++;
+            }
+          }
+          if (routed > 0) {
             courtAudioChunks++;
             if (courtAudioChunks % 100 === 1) {
-              console.log(`[Court] Audio chunk #${courtAudioChunks} → ${activeSpeaker} (${data.length} bytes)`);
+              console.log(`[Court] Audio chunk #${courtAudioChunks} → [${[...activeSpeakers].join(', ')}] (${data.length} bytes)`);
             }
-          } else {
-            if (courtAudioChunks === 0) {
-              console.warn(`[Court] Binary audio received but NOT routed — activeSpeaker=${activeSpeaker}, has transcriber=${session.transcribers.has(activeSpeaker || '')}`);
-            }
+          } else if (courtAudioChunks === 0) {
+            console.warn(`[Court] Binary audio received but NOT routed — activeSpeakers=[${[...activeSpeakers].join(', ')}]`);
           }
           return;
         }
@@ -413,7 +417,7 @@ server.on('upgrade', (request, socket, head) => {
 
             if (azureSession) {
               session.transcribers.set(role, azureSession);
-              activeSpeaker = role;
+              activeSpeakers.add(role);
             }
           } else if (msg.type === 'stop-speaker') {
             const role = msg.role;
@@ -421,7 +425,7 @@ server.on('upgrade', (request, socket, head) => {
             if (transcriber) {
               transcriber.stop().then((entries) => {
                 session.transcribers.delete(role);
-                if (activeSpeaker === role) activeSpeaker = null;
+                activeSpeakers.delete(role);
                 broadcast({
                   type: 'status',
                   session_id: sessionId,
@@ -431,9 +435,12 @@ server.on('upgrade', (request, socket, head) => {
                 });
               });
             }
-          } else if (msg.type === 'set-active-speaker') {
-            // Switch which speaker receives audio from this connection
-            activeSpeaker = msg.role;
+          } else if (msg.type === 'add-active-speaker') {
+            // Add a speaker to receive audio from this connection
+            activeSpeakers.add(msg.role);
+          } else if (msg.type === 'remove-active-speaker') {
+            // Remove a speaker from receiving audio
+            activeSpeakers.delete(msg.role);
           }
         } catch (e) {
           console.error('[Court] Invalid WS message:', e.message);

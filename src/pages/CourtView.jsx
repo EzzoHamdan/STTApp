@@ -15,8 +15,8 @@ export default function CourtView() {
   const audio = useAudioCapture();
   const cleanupRef = useRef([]);
 
-  // Track which speaker is currently streaming audio from this browser
-  const [recordingSpeaker, setRecordingSpeaker] = useState(null);
+  // Track which speakers are currently streaming audio from this browser
+  const [recordingSpeakers, setRecordingSpeakers] = useState(new Set());
 
   // Toast
   const [toastMsg, setToastMsg] = useState('');
@@ -31,9 +31,11 @@ export default function CourtView() {
   async function handleNewSession() {
     if (court.sessionId && !window.confirm('Start a new session? Current data is preserved.')) return;
 
-    // Stop any active recording first
-    if (recordingSpeaker) {
-      await handleStopSpeaker(recordingSpeaker);
+    // Stop any active recordings first
+    if (recordingSpeakers.size > 0) {
+      for (const role of recordingSpeakers) {
+        await handleStopSpeaker(role);
+      }
     }
 
     const sid = await court.createSession();
@@ -46,28 +48,23 @@ export default function CourtView() {
 
   // ── Start speaker ──────────────────────────────────────────────
   async function handleStartSpeaker(role) {
-    // If another speaker is currently recording, stop them first
-    if (recordingSpeaker && recordingSpeaker !== role) {
-      await handleStopSpeaker(recordingSpeaker);
-    }
-
     try {
       // Start mic if not already capturing
       if (!audio.isCapturing) {
         await audio.start();
+
+        // Wire audio data (only once — shared by all speakers)
+        const unsub = audio.onAudioData((buffer) => {
+          court.sendAudio(buffer);
+        });
+        cleanupRef.current.push(unsub);
       }
 
       // Tell server to start Azure for this speaker
       court.startSpeaker(role);
-      court.setActiveSpeaker(role);
+      court.addActiveSpeaker(role);
 
-      // Wire audio data
-      const unsub = audio.onAudioData((buffer) => {
-        court.sendAudio(buffer);
-      });
-      cleanupRef.current.push(unsub);
-
-      setRecordingSpeaker(role);
+      setRecordingSpeakers((prev) => new Set([...prev, role]));
     } catch (err) {
       console.error('Failed to start speaker:', err);
       toast(`❌ Could not start ${role}`);
@@ -76,16 +73,20 @@ export default function CourtView() {
 
   // ── Stop speaker ──────────────────────────────────────────────
   async function handleStopSpeaker(role) {
-    // Stop mic
-    audio.stop();
-
-    // Clean up audio listeners
-    cleanupRef.current.forEach((fn) => fn());
-    cleanupRef.current = [];
-
-    // Tell server
+    // Tell server to stop this speaker
     court.stopSpeaker(role);
-    setRecordingSpeaker(null);
+    court.removeActiveSpeaker(role);
+
+    const next = new Set(recordingSpeakers);
+    next.delete(role);
+    setRecordingSpeakers(next);
+
+    // If no speakers left, stop the mic
+    if (next.size === 0) {
+      audio.stop();
+      cleanupRef.current.forEach((fn) => fn());
+      cleanupRef.current = [];
+    }
   }
 
   // ── Merge ──────────────────────────────────────────────────────
@@ -277,7 +278,7 @@ export default function CourtView() {
           <div style={{ flex: 1 }} />
 
           {/* Recording indicator */}
-          {recordingSpeaker && (
+          {recordingSpeakers.size > 0 && (
             <span
               style={{
                 display: 'flex',
@@ -297,7 +298,7 @@ export default function CourtView() {
                   display: 'inline-block',
                 }}
               />
-              Recording: {recordingSpeaker.replace('_', ' ')}
+              Recording: {[...recordingSpeakers].map(r => r.replace('_', ' ')).join(', ')}
             </span>
           )}
         </div>

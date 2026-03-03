@@ -220,10 +220,17 @@ export function useCourtSession() {
     }
   }, []);
 
-  /** Tell the server which speaker should receive audio from this connection. */
-  const setActiveSpeaker = useCallback((role) => {
+  /** Tell the server to add a speaker to receive audio from this connection. */
+  const addActiveSpeaker = useCallback((role) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'set-active-speaker', role }));
+      wsRef.current.send(JSON.stringify({ type: 'add-active-speaker', role }));
+    }
+  }, []);
+
+  /** Tell the server to remove a speaker from receiving audio. */
+  const removeActiveSpeaker = useCallback((role) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'remove-active-speaker', role }));
     }
   }, []);
 
@@ -266,7 +273,8 @@ export function useCourtSession() {
     startSpeaker,
     stopSpeaker,
     sendAudio,
-    setActiveSpeaker,
+    addActiveSpeaker,
+    removeActiveSpeaker,
     merge,
     clearTimeline,
   };
