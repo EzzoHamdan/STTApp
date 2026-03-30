@@ -59,8 +59,8 @@ export default function AccessGate({ children }) {
 
   if (state === 'loading') {
     return (
-      <div style={{ minHeight: '100vh', background: '#07080d', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ color: '#475569', fontSize: 14 }}>Loading…</span>
+      <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ color: 'var(--muted)', fontSize: 14 }}>Loading...</span>
       </div>
     );
   }
@@ -72,18 +72,18 @@ export default function AccessGate({ children }) {
     <div
       style={{
         minHeight: '100vh',
-        background: '#07080d',
+        background: 'var(--bg)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontFamily: "'DM Sans','Segoe UI',sans-serif",
+        fontFamily: 'Manrope, sans-serif',
       }}
     >
       <form
         onSubmit={handleSubmit}
         style={{
-          background: '#0b0c17',
-          border: '1px solid #1e2433',
+          background: 'var(--panel)',
+          border: '1px solid var(--border)',
           borderRadius: 16,
           padding: '40px 36px',
           maxWidth: 380,
@@ -91,11 +91,11 @@ export default function AccessGate({ children }) {
           textAlign: 'center',
         }}
       >
-        <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
-        <h2 style={{ color: '#e2e8f0', fontSize: 18, fontWeight: 700, margin: '0 0 6px' }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>Lock</div>
+        <h2 style={{ color: 'var(--text)', fontSize: 18, fontWeight: 700, margin: '0 0 6px' }}>
           Access Required
         </h2>
-        <p style={{ color: '#475569', fontSize: 13, margin: '0 0 24px', lineHeight: 1.5 }}>
+        <p style={{ color: 'var(--muted)', fontSize: 13, margin: '0 0 24px', lineHeight: 1.5 }}>
           Enter the access code to use the Arabic STT Platform.
         </p>
 
@@ -109,31 +109,31 @@ export default function AccessGate({ children }) {
             width: '100%',
             padding: '12px 16px',
             borderRadius: 8,
-            background: '#131720',
-            border: '1px solid #1e2433',
-            color: '#e2e8f0',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            color: 'var(--text)',
             fontSize: 14,
             outline: 'none',
-            fontFamily: 'Space Mono, monospace',
+            fontFamily: 'JetBrains Mono, monospace',
             boxSizing: 'border-box',
             marginBottom: 12,
           }}
         />
 
         {error && (
-          <div style={{ color: '#f87171', fontSize: 12, marginBottom: 12 }}>{error}</div>
+          <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 12 }}>{error}</div>
         )}
 
         <button
           type="submit"
           disabled={!code.trim()}
+          className="stt-btn"
           style={{
             width: '100%',
             padding: '12px 0',
-            borderRadius: 8,
-            background: code.trim() ? '#00C6C6' : '#131720',
-            border: 'none',
-            color: code.trim() ? '#07080d' : '#475569',
+            background: code.trim() ? 'var(--accent)' : 'var(--surface)',
+            border: `1px solid ${code.trim() ? 'var(--accent)' : 'var(--border)'}`,
+            color: code.trim() ? '#fff' : 'var(--muted)',
             fontSize: 14,
             fontWeight: 700,
             cursor: code.trim() ? 'pointer' : 'default',

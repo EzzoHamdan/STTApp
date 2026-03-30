@@ -15,16 +15,7 @@ function formatTime(iso) {
   return `${hh}:${mm}:${ss}.${ms}`;
 }
 
-/**
- * Unified timeline component — shows all speakers' utterances in chronological order
- * with overlap detection badges.
- */
-export default function UnifiedTimeline({
-  entries,
-  overlapWindows,
-  colors,
-  onClear,
-}) {
+export default function UnifiedTimeline({ entries, overlapWindows, colors, onClear }) {
   const scrollRef = useRef(null);
   const resolvedColors = { ...SPEAKER_COLORS, ...colors };
 
@@ -37,61 +28,50 @@ export default function UnifiedTimeline({
   return (
     <div
       style={{
-        background: '#0d1117',
-        border: '1px solid #1e2433',
+        background: 'var(--panel)',
+        border: '1px solid var(--border)',
         borderRadius: 12,
         overflow: 'hidden',
       }}
     >
-      {/* ── Header ────────────────────────────────────────── */}
       <div
         style={{
-          padding: '14px 18px',
-          borderBottom: '1px solid #1e2433',
+          padding: '12px 16px',
+          borderBottom: '1px solid var(--border)',
           display: 'flex',
           alignItems: 'center',
           gap: 12,
         }}
       >
-        <h2 style={{ fontSize: 15, fontWeight: 700, flex: 1, margin: 0 }}>
-          📜 Unified Timeline
+        <h2 style={{ fontSize: 15, fontWeight: 700, flex: 1, margin: 0, color: 'var(--text)' }}>
+          Unified Timeline
         </h2>
+
         <span
           style={{
-            background: '#21262d',
-            border: '1px solid #30363d',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
             borderRadius: 10,
             padding: '2px 10px',
             fontSize: 12,
-            color: '#7d8590',
-            fontFamily: 'Consolas, monospace',
+            color: 'var(--muted)',
+            fontFamily: 'JetBrains Mono, monospace',
           }}
         >
           {entries.length} turns
         </span>
-        <button
-          onClick={onClear}
-          style={{
-            fontSize: 11,
-            padding: '4px 10px',
-            borderRadius: 6,
-            background: '#21262d',
-            color: '#e6edf3',
-            border: '1px solid #30363d',
-            cursor: 'pointer',
-          }}
-        >
+
+        <button onClick={onClear} className="stt-btn stt-btn-ghost" style={{ fontSize: 11, padding: '4px 10px' }}>
           Clear
         </button>
       </div>
 
-      {/* ── Entries ───────────────────────────────────────── */}
       <div
         ref={scrollRef}
         style={{
-          maxHeight: 300,
+          maxHeight: 320,
           overflowY: 'auto',
-          padding: '12px 18px',
+          padding: '12px 16px',
           display: 'flex',
           flexDirection: 'column',
           gap: 6,
@@ -101,12 +81,12 @@ export default function UnifiedTimeline({
           <div
             style={{
               textAlign: 'center',
-              color: '#7d8590',
+              color: 'var(--muted)',
               padding: '40px 0',
               fontSize: 13,
             }}
           >
-            Start a session and begin recording to see the unified transcript here.
+            Start a session and record speakers to build the timeline.
           </div>
         )}
 
@@ -122,52 +102,38 @@ export default function UnifiedTimeline({
                 alignItems: 'baseline',
                 padding: '6px 10px',
                 borderRadius: 6,
-                background: hasOverlap ? '#f0883e0F' : 'transparent',
-                borderLeft: hasOverlap ? '2px solid #f0883e' : '2px solid transparent',
-                transition: 'background 0.15s',
+                background: hasOverlap ? 'var(--warning-soft)' : 'transparent',
+                borderLeft: hasOverlap ? '2px solid var(--warning)' : '2px solid transparent',
               }}
             >
               <span
                 style={{
                   fontSize: 10,
-                  color: '#7d8590',
-                  fontFamily: 'Consolas, monospace',
+                  color: 'var(--muted)',
+                  fontFamily: 'JetBrains Mono, monospace',
                   minWidth: 28,
                 }}
               >
                 #{entry.turn ?? i + 1}
               </span>
+
               <span
                 style={{
                   fontSize: 10,
-                  color: '#7d8590',
-                  fontFamily: 'Consolas, monospace',
+                  color: 'var(--muted)',
+                  fontFamily: 'JetBrains Mono, monospace',
                   minWidth: 90,
                 }}
               >
                 {formatTime(entry.utc_iso)}
               </span>
-              <span
-                style={{
-                  fontWeight: 700,
-                  fontSize: 12,
-                  minWidth: 80,
-                  color,
-                }}
-              >
-                {entry.speaker}
-              </span>
-              <span
-                style={{
-                  fontSize: 14,
-                  lineHeight: 1.4,
-                  flex: 1,
-                  direction: 'rtl',
-                  textAlign: 'right',
-                }}
-              >
+
+              <span style={{ fontWeight: 700, fontSize: 12, minWidth: 80, color }}>{entry.speaker}</span>
+
+              <span style={{ fontSize: 14, lineHeight: 1.4, flex: 1, direction: 'rtl', textAlign: 'right', color: 'var(--text)' }}>
                 {entry.text}
               </span>
+
               {hasOverlap && (
                 <span
                   style={{
@@ -176,16 +142,16 @@ export default function UnifiedTimeline({
                     gap: 3,
                     fontSize: 10,
                     fontWeight: 600,
-                    color: '#f0883e',
-                    background: '#f0883e26',
-                    border: '1px solid #f0883e66',
+                    color: 'var(--warning)',
+                    background: 'var(--warning-soft)',
+                    border: '1px solid var(--warning)',
                     borderRadius: 8,
                     padding: '1px 6px',
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
                   }}
                 >
-                  ⚡ {(entry.overlap_with || []).join(' + ')}
+                  {(entry.overlap_with || []).join(' + ')}
                 </span>
               )}
             </div>
@@ -193,29 +159,25 @@ export default function UnifiedTimeline({
         })}
       </div>
 
-      {/* ── Overlap summary ──────────────────────────────── */}
       {overlapWindows && overlapWindows.length > 0 && (
         <div
           style={{
-            borderTop: '1px solid #1e2433',
-            padding: '12px 18px',
-            background: '#f0883e08',
+            borderTop: '1px solid var(--border)',
+            padding: '12px 16px',
+            background: 'var(--warning-soft)',
           }}
         >
           <div
             style={{
               fontSize: 12,
               fontWeight: 700,
-              color: '#f0883e',
+              color: 'var(--warning)',
               marginBottom: 8,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
             }}
           >
-            ⚡ Simultaneous Speech Detected — {overlapWindows.length} period
-            {overlapWindows.length !== 1 ? 's' : ''}
+            Simultaneous speech detected · {overlapWindows.length} period{overlapWindows.length !== 1 ? 's' : ''}
           </div>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {overlapWindows.map((w, i) => (
               <div
@@ -226,35 +188,17 @@ export default function UnifiedTimeline({
                   alignItems: 'baseline',
                   fontSize: 12,
                   padding: '4px 8px',
-                  background: '#21262d',
+                  background: 'var(--surface)',
                   borderRadius: 6,
-                  borderLeft: '2px solid #f0883e',
+                  borderLeft: '2px solid var(--warning)',
                 }}
               >
-                <span
-                  style={{
-                    color: '#7d8590',
-                    minWidth: 20,
-                    fontFamily: 'Consolas, monospace',
-                  }}
-                >
-                  {i + 1}
-                </span>
-                <span
-                  style={{
-                    color: '#7d8590',
-                    fontFamily: 'Consolas, monospace',
-                    minWidth: 160,
-                  }}
-                >
+                <span style={{ color: 'var(--muted)', minWidth: 20, fontFamily: 'JetBrains Mono, monospace' }}>{i + 1}</span>
+                <span style={{ color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace', minWidth: 160 }}>
                   {formatTime(w.start_iso)} → {formatTime(w.end_iso)}
                 </span>
-                <span style={{ color: '#7d8590', minWidth: 50 }}>
-                  {w.duration_sec}s
-                </span>
-                <span style={{ color: '#f0883e', fontWeight: 600 }}>
-                  {w.speakers.join(' + ')}
-                </span>
+                <span style={{ color: 'var(--muted)', minWidth: 50 }}>{w.duration_sec}s</span>
+                <span style={{ color: 'var(--warning)', fontWeight: 600 }}>{w.speakers.join(' + ')}</span>
               </div>
             ))}
           </div>

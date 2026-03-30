@@ -5,7 +5,7 @@ import { getAccessCode, authFetch } from '../components/AccessGate';
  * React hook managing the full court session lifecycle:
  *  - Session creation via REST API
  *  - WebSocket connection for live events
- *  - Speaker start/stop (creates Azure recognizer on the server)
+ *  - Speaker start/stop (creates selected recognizer on the server)
  *  - Audio routing to the active speaker
  *  - Unified timeline accumulation
  *  - Merge trigger
@@ -33,7 +33,10 @@ export function useCourtSession() {
   function updateSpeaker(role, updates) {
     setSpeakerStates((prev) => ({
       ...prev,
-      [role]: { ...(prev[role] || { status: 'idle', transcripts: [], partial: '' }), ...updates },
+      [role]: {
+        ...(prev[role] || { status: 'idle', transcripts: [], partial: '', provider: 'azure' }),
+        ...updates,
+      },
     }));
   }
 
@@ -89,6 +92,18 @@ export function useCourtSession() {
     switch (msg.type) {
       case 'hello':
         if (msg.colors) setColors(msg.colors);
+        if (msg.active_provider_map) {
+          setSpeakerStates((prev) => {
+            const next = { ...prev };
+            Object.entries(msg.active_provider_map).forEach(([role, provider]) => {
+              next[role] = {
+                ...(next[role] || { status: 'idle', transcripts: [], partial: '' }),
+                provider,
+              };
+            });
+            return next;
+          });
+        }
         break;
 
       case 'result': {
@@ -102,6 +117,7 @@ export function useCourtSession() {
               ...sp,
               transcripts: [...(sp.transcripts || []), entry],
               partial: '',
+              ...(entry.provider ? { provider: entry.provider } : {}),
             },
           };
         });
@@ -115,7 +131,10 @@ export function useCourtSession() {
       }
 
       case 'partial':
-        updateSpeaker(msg.speaker, { partial: msg.text });
+        updateSpeaker(msg.speaker, {
+          partial: msg.text,
+          ...(msg.provider ? { provider: msg.provider } : {}),
+        });
         break;
 
       case 'status':
@@ -138,13 +157,19 @@ export function useCourtSession() {
   }
 
   function handleStatusEvent(msg) {
-    const { speaker, event } = msg;
+    const { speaker, event, provider } = msg;
     switch (event) {
       case 'connected':
-        updateSpeaker(speaker, { status: 'connecting' });
+        updateSpeaker(speaker, {
+          status: 'connecting',
+          ...(provider ? { provider } : {}),
+        });
         break;
       case 'started':
-        updateSpeaker(speaker, { status: 'recording' });
+        updateSpeaker(speaker, {
+          status: 'recording',
+          ...(provider ? { provider } : {}),
+        });
         break;
       case 'stopped':
         updateSpeaker(speaker, { status: 'idle', partial: '' });
@@ -155,8 +180,12 @@ export function useCourtSession() {
       case 'speech_end':
         break;
       case 'error':
-        console.error(`[Court] Azure error for ${speaker}: ${msg.text}`);
-        updateSpeaker(speaker, { status: 'error', error: msg.text || 'Unknown error' });
+        console.error(`[Court] STT error for ${speaker}: ${msg.text}`);
+        updateSpeaker(speaker, {
+          status: 'error',
+          error: msg.text || 'Unknown error',
+          ...(provider ? { provider } : {}),
+        });
         break;
       case 'partial':
         updateSpeaker(speaker, { partial: msg.text });
@@ -182,7 +211,7 @@ export function useCourtSession() {
       const speakers = data.meta?.speakers || ['Judge', 'Lawyer_1', 'Lawyer_2'];
       const initStates = {};
       speakers.forEach((role) => {
-        initStates[role] = { status: 'idle', transcripts: [], partial: '' };
+        initStates[role] = { status: 'idle', transcripts: [], partial: '', provider: 'azure' };
       });
       setSpeakerStates(initStates);
 
@@ -195,10 +224,10 @@ export function useCourtSession() {
   }, [connectWS]);
 
   const startSpeaker = useCallback(
-    (role) => {
+    (role, provider = 'azure') => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
-        updateSpeaker(role, { status: 'connecting' });
-        wsRef.current.send(JSON.stringify({ type: 'start-speaker', role }));
+        updateSpeaker(role, { status: 'connecting', provider, error: '' });
+        wsRef.current.send(JSON.stringify({ type: 'start-speaker', role, provider }));
       }
     },
     []

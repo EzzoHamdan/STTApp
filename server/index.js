@@ -10,8 +10,12 @@ import { createDeepgramSession } from './providers/deepgram.js';
 import { createSonioxSession } from './providers/soniox.js';
 import { createSpeechmaticsSession } from './providers/speechmatics.js';
 import { createMunsitSession } from './providers/munsit.js';
-import { createAzureSession } from './providers/azure.js';
 import { createAzureArenaSession } from './providers/azure-arena.js';
+import {
+  COURT_PROVIDER_OPTIONS,
+  createCourtTranscriber,
+  normalizeCourtProvider,
+} from './providers/court-transcribers.js';
 import {
   generateSessionId,
   initSession,
@@ -29,13 +33,14 @@ const __dirname = dirname(__filename);
 const IS_PROD = process.env.NODE_ENV === 'production';
 const DIST_DIR = join(__dirname, '..', 'dist');
 
-// ── Validate required environment ───────────────────────────────────
-const REQUIRED_VARS = ['AZURE_SPEECH_KEY', 'AZURE_SPEECH_REGION'];
-const missing = REQUIRED_VARS.filter((k) => !process.env[k]);
-if (missing.length > 0) {
-  console.warn(`⚠  Missing required env vars: ${missing.join(', ')}`);
-  console.warn('   Court transcription will not work until these are set.');
-  console.warn('   Copy .env.example → .env and fill in your keys.\n');
+// ── Validate provider environment ──────────────────────────────────
+const configuredCourtProviders = COURT_PROVIDER_OPTIONS.filter((p) => process.env[p.envKey]);
+if (configuredCourtProviders.length === 0) {
+  console.warn('⚠  No court STT provider key is configured.');
+  console.warn('   Configure one of: AZURE_SPEECH_KEY, DEEPGRAM_API_KEY, SPEECHMATICS_API_KEY\n');
+} else if (!process.env.AZURE_SPEECH_KEY) {
+  console.warn('⚠  AZURE_SPEECH_KEY is missing (Court default is Azure).');
+  console.warn('   Court can still run if Deepgram or Speechmatics is selected in the UI.\n');
 }
 
 const app = express();
@@ -108,7 +113,7 @@ app.use((req, _res, next) => {
 });
 
 // ── Court session state (in-memory) ─────────────────────────────────
-// Maps sessionId → { wsClients: Set<ws>, transcribers: Map<role, azureSession>, lastUtteranceWindows: Map }
+// Maps sessionId → { wsClients: Set<ws>, transcribers: Map<role, { provider, stream }>, lastUtteranceWindows: Map }
 const courtSessions = new Map();
 
 // ── API key status (check which keys are configured) ────────────────
@@ -179,12 +184,24 @@ app.get('/api/court/session/:id/status', (req, res) => {
   if (!meta) return res.status(404).json({ error: 'Session not found' });
   const session = courtSessions.get(sessionId);
   const activeSpeakers = session ? [...session.transcribers.keys()] : [];
-  res.json({ meta, active_speakers: activeSpeakers, colors: SPEAKER_COLORS });
+  const activeProviders = session
+    ? Object.fromEntries(
+        [...session.transcribers.entries()].map(([role, value]) => [role, value.provider])
+      )
+    : {};
+  res.json({
+    meta,
+    active_speakers: activeSpeakers,
+    active_providers: activeProviders,
+    colors: SPEAKER_COLORS,
+  });
 });
 
 app.get('/api/court/keys/status', (req, res) => {
   res.json({
     azure: !!process.env.AZURE_SPEECH_KEY,
+    deepgram: !!process.env.DEEPGRAM_API_KEY,
+    speechmatics: !!process.env.SPEECHMATICS_API_KEY,
   });
 });
 
@@ -304,6 +321,9 @@ server.on('upgrade', (request, socket, head) => {
           session_id: sessionId,
           meta,
           active_speakers: currentlyRecording,
+          active_provider_map: Object.fromEntries(
+            [...session.transcribers.entries()].map(([role, value]) => [role, value.provider])
+          ),
           colors: SPEAKER_COLORS,
         })
       );
@@ -323,7 +343,7 @@ server.on('upgrade', (request, socket, head) => {
           let routed = 0;
           for (const speaker of activeSpeakers) {
             if (session.transcribers.has(speaker)) {
-              session.transcribers.get(speaker).sendAudio(data);
+              session.transcribers.get(speaker).stream.sendAudio(data);
               routed++;
             }
           }
@@ -350,24 +370,41 @@ server.on('upgrade', (request, socket, head) => {
 
           if (msg.type === 'start-speaker') {
             const role = msg.role;
+            const provider = normalizeCourtProvider(msg.provider);
+
             if (session.transcribers.has(role)) {
               ws.send(JSON.stringify({ type: 'error', message: `${role} is already recording` }));
               return;
             }
 
-            const azureSession = createAzureSession(sessionId, role, process.env, {
+            const providerMeta = COURT_PROVIDER_OPTIONS.find((p) => p.id === provider);
+            if (!providerMeta || !process.env[providerMeta.envKey]) {
+              ws.send(
+                JSON.stringify({
+                  type: 'error',
+                  message: `${providerMeta?.label || provider} key is missing`,
+                  speaker: role,
+                  provider,
+                })
+              );
+              return;
+            }
+
+            const transcriber = createCourtTranscriber(provider, sessionId, role, process.env, {
               onResult(entry) {
+                const enrichedEntry = { ...entry, provider };
+
                 // Persist to JSONL (non-critical — don't let it kill the broadcast)
                 try {
-                  appendEntry(sessionId, role, entry);
+                  appendEntry(sessionId, role, enrichedEntry);
                 } catch (fsErr) {
                   console.error(`[Court] appendEntry failed for ${role}:`, fsErr.message);
                 }
 
                 // Compute real-time overlap
                 try {
-                  const endDt = new Date(entry.utc_iso);
-                  const dur = parseFloat(entry.duration_sec) || 0;
+                  const endDt = new Date(enrichedEntry.utc_iso);
+                  const dur = parseFloat(enrichedEntry.duration_sec) || 0;
                   const startDt = new Date(endDt.getTime() - dur * 1000);
 
                   const windows = session.lastUtteranceWindows;
@@ -381,7 +418,7 @@ server.on('upgrade', (request, socket, head) => {
                   windows.set(role, [startDt, endDt]);
 
                   broadcast({
-                    ...entry,
+                    ...enrichedEntry,
                     type: 'result',
                     overlap: overlapWith.length > 0,
                     overlap_with: overlapWith.sort(),
@@ -389,17 +426,18 @@ server.on('upgrade', (request, socket, head) => {
                 } catch (err) {
                   console.error(`[Court] onResult broadcast failed for ${role}:`, err.message);
                   // Still try to broadcast the raw result
-                  broadcast({ ...entry, type: 'result', overlap: false, overlap_with: [] });
+                  broadcast({ ...enrichedEntry, type: 'result', overlap: false, overlap_with: [] });
                 }
               },
               onPartial(text) {
-                broadcast({ type: 'partial', speaker: role, text });
+                broadcast({ type: 'partial', speaker: role, text, provider });
               },
               onStatus(event, text) {
                 broadcast({
                   type: 'status',
                   session_id: sessionId,
                   speaker: role,
+                  provider,
                   event,
                   text,
                 });
@@ -409,29 +447,31 @@ server.on('upgrade', (request, socket, head) => {
                   type: 'status',
                   session_id: sessionId,
                   speaker: role,
+                  provider,
                   event: 'error',
                   text: String(errorText),
                 });
               },
             });
 
-            if (azureSession) {
-              session.transcribers.set(role, azureSession);
+            if (transcriber) {
+              session.transcribers.set(role, { provider, stream: transcriber });
               activeSpeakers.add(role);
             }
           } else if (msg.type === 'stop-speaker') {
             const role = msg.role;
-            const transcriber = session.transcribers.get(role);
-            if (transcriber) {
-              transcriber.stop().then((entries) => {
+            const active = session.transcribers.get(role);
+            if (active) {
+              active.stream.stop().then((entries) => {
                 session.transcribers.delete(role);
                 activeSpeakers.delete(role);
                 broadcast({
                   type: 'status',
                   session_id: sessionId,
                   speaker: role,
+                  provider: active.provider,
                   event: 'stopped',
-                  text: `${role} stopped. ${entries.length} utterances saved.`,
+                  text: `${role} stopped (${active.provider}). ${entries.length} utterances saved.`,
                 });
               });
             }
@@ -505,12 +545,12 @@ setInterval(() => {
 async function shutdown(signal) {
   console.log(`\n${signal} received — shutting down gracefully…`);
 
-  // Stop all active Azure transcribers
+  // Stop all active court transcribers
   const stopPromises = [];
   for (const [sid, session] of courtSessions.entries()) {
-    for (const [role, transcriber] of session.transcribers.entries()) {
-      console.log(`  Stopping ${role} in session ${sid}`);
-      stopPromises.push(transcriber.stop().catch(() => {}));
+    for (const [role, active] of session.transcribers.entries()) {
+      console.log(`  Stopping ${role} (${active.provider}) in session ${sid}`);
+      stopPromises.push(active.stream.stop().catch(() => {}));
     }
     // Close all WS clients
     session.wsClients.forEach((ws) => {

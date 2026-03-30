@@ -1,20 +1,20 @@
 import { useRef, useEffect } from 'react';
 
 const STATUS_CONFIG = {
-  idle: { color: '#475569', label: 'Idle', dot: '#475569' },
-  connecting: { color: '#f59e0b', label: 'Connecting…', dot: '#f59e0b' },
-  connected: { color: '#4ade80', label: 'Live', dot: '#4ade80' },
-  error: { color: '#f87171', label: 'Error', dot: '#ef4444' },
-  disconnected: { color: '#475569', label: 'Disconnected', dot: '#475569' },
-  ended: { color: '#475569', label: 'Ended', dot: '#475569' },
+  idle: { color: 'var(--muted)', label: 'Idle' },
+  connecting: { color: 'var(--warning)', label: 'Connecting' },
+  connected: { color: 'var(--success)', label: 'Live' },
+  error: { color: 'var(--danger)', label: 'Error' },
+  disconnected: { color: 'var(--muted)', label: 'Disconnected' },
+  ended: { color: 'var(--muted)', label: 'Ended' },
 };
 
 const MODEL_INFO = {
-  deepgram: { name: 'Deepgram Nova-3', flag: '🇺🇸', color: '#00C6C6', tagline: 'Production-grade, dialect-first' },
-  munsit: { name: 'Munsit', flag: '🇦🇪', color: '#FF6B35', tagline: 'Sovereign Arabic AI, UAE-built' },
-  soniox: { name: 'Soniox', flag: '🇺🇸', color: '#059669', tagline: 'Ultra-low latency, code-switching' },
-  speechmatics: { name: 'Speechmatics', flag: '🇬🇧', color: '#8b5cf6', tagline: '55-language enterprise streaming' },
-  azure: { name: 'Azure Speech', flag: '🔷', color: '#0078d4', tagline: 'Microsoft Cognitive Services STT' },
+  deepgram: { name: 'Deepgram Nova-3', flag: 'DG', color: '#00C6C6', tagline: 'Arabic streaming STT' },
+  munsit: { name: 'Munsit', flag: 'MU', color: '#FF6B35', tagline: 'Regional Arabic model' },
+  soniox: { name: 'Soniox', flag: 'SX', color: '#059669', tagline: 'Low-latency streaming' },
+  speechmatics: { name: 'Speechmatics', flag: 'SM', color: '#8b5cf6', tagline: 'Enterprise real-time STT' },
+  azure: { name: 'Azure Speech', flag: 'AZ', color: '#0078d4', tagline: 'Microsoft speech service' },
 };
 
 export default function TranscriptPanel({
@@ -30,7 +30,6 @@ export default function TranscriptPanel({
   const info = MODEL_INFO[provider];
   const statusCfg = STATUS_CONFIG[status] || STATUS_CONFIG.idle;
 
-  // Auto-scroll to bottom on new content
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -43,33 +42,43 @@ export default function TranscriptPanel({
   return (
     <div
       style={{
-        background: '#0b0c17',
-        border: `1px solid ${status === 'connected' ? info.color + '44' : '#0f111c'}`,
+        background: 'var(--panel)',
+        border: `1px solid ${status === 'connected' ? `${info.color}66` : 'var(--border)'}`,
         borderRadius: 12,
         display: 'flex',
         flexDirection: 'column',
-        height: '100%',
         minHeight: 300,
         overflow: 'hidden',
-        transition: 'border-color 0.3s',
       }}
     >
-      {/* ── Header ──────────────────────────────────────────── */}
       <div
         style={{
           padding: '14px 16px 12px',
-          borderBottom: '1px solid #0f111c',
+          borderBottom: '1px solid var(--border)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'flex-start',
+          background: 'var(--surface)',
         }}
       >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontSize: 16 }}>{info.flag}</span>
-            <span style={{ fontSize: 15, fontWeight: 700, color: info.color }}>{info.name}</span>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 800,
+                borderRadius: 6,
+                border: `1px solid ${info.color}`,
+                color: info.color,
+                padding: '2px 6px',
+                fontFamily: 'JetBrains Mono, monospace',
+              }}
+            >
+              {info.flag}
+            </span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{info.name}</span>
           </div>
-          <div style={{ fontSize: 10, color: '#334155', fontFamily: 'Space Mono, monospace' }}>
+          <div style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'JetBrains Mono, monospace' }}>
             {info.tagline}
           </div>
         </div>
@@ -82,7 +91,7 @@ export default function TranscriptPanel({
                 width: 7,
                 height: 7,
                 borderRadius: '50%',
-                background: statusCfg.dot,
+                background: statusCfg.color,
                 display: 'inline-block',
               }}
             />
@@ -91,19 +100,21 @@ export default function TranscriptPanel({
                 fontSize: 10,
                 fontWeight: 700,
                 color: statusCfg.color,
-                fontFamily: 'Space Mono, monospace',
+                fontFamily: 'JetBrains Mono, monospace',
               }}
             >
               {statusCfg.label}
             </span>
           </div>
+
           {avgLatency !== null && (
             <span
               style={{
                 fontSize: 10,
-                color: avgLatency < 500 ? '#4ade80' : avgLatency < 1000 ? '#fcd34d' : '#f87171',
-                fontFamily: 'Space Mono, monospace',
-                background: '#131720',
+                color: avgLatency < 500 ? 'var(--success)' : avgLatency < 1000 ? 'var(--warning)' : 'var(--danger)',
+                fontFamily: 'JetBrains Mono, monospace',
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
                 padding: '2px 6px',
                 borderRadius: 3,
               }}
@@ -114,7 +125,6 @@ export default function TranscriptPanel({
         </div>
       </div>
 
-      {/* ── Transcript area ─────────────────────────────────── */}
       <div
         ref={scrollRef}
         style={{
@@ -132,17 +142,17 @@ export default function TranscriptPanel({
             style={{
               direction: 'ltr',
               textAlign: 'left',
-              background: '#ef444412',
-              border: '1px solid #ef444428',
+              background: 'var(--danger-soft)',
+              border: '1px solid var(--danger)',
               borderRadius: 6,
               padding: '8px 12px',
               fontSize: 11,
-              color: '#fca5a5',
+              color: 'var(--danger)',
               marginBottom: 10,
-              fontFamily: 'Space Mono, monospace',
+              fontFamily: 'JetBrains Mono, monospace',
             }}
           >
-            ⚠ {error}
+            {error}
           </div>
         )}
 
@@ -151,18 +161,17 @@ export default function TranscriptPanel({
             style={{
               direction: 'ltr',
               textAlign: 'center',
-              color: '#1e2433',
+              color: 'var(--muted)',
               fontSize: 12,
               paddingTop: 60,
-              fontFamily: 'Space Mono, monospace',
+              fontFamily: 'JetBrains Mono, monospace',
             }}
           >
-            {isRecording ? 'Waiting for speech…' : 'Press record to start'}
+            {isRecording ? 'Waiting for speech...' : 'Press record to start'}
           </div>
         )}
 
-        {/* Final transcripts */}
-        <span style={{ color: '#e2e8f0' }}>
+        <span style={{ color: 'var(--text)' }}>
           {transcripts.map((t, i) => (
             <span key={i}>
               {i > 0 ? ' ' : ''}
@@ -171,26 +180,24 @@ export default function TranscriptPanel({
           ))}
         </span>
 
-        {/* Partial / interim */}
         {partial && (
-          <span style={{ color: info.color + '99', fontStyle: 'italic' }}>
+          <span style={{ color: `${info.color}99`, fontStyle: 'italic' }}>
             {transcripts.length > 0 ? ' ' : ''}
             {partial}
           </span>
         )}
       </div>
 
-      {/* ── Footer stats ────────────────────────────────────── */}
       <div
         style={{
           padding: '8px 16px',
-          borderTop: '1px solid #0f111c',
+          borderTop: '1px solid var(--border)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           fontSize: 10,
-          color: '#1e2433',
-          fontFamily: 'Space Mono, monospace',
+          color: 'var(--muted)',
+          fontFamily: 'JetBrains Mono, monospace',
         }}
       >
         <span>{wordCount} words</span>
