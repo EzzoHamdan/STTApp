@@ -100,7 +100,7 @@ export default function CourtView() {
       setRecordingSpeakers((prev) => new Set([...prev, role]));
     } catch (err) {
       console.error('Failed to start speaker:', err);
-      toast(`❌ Could not start ${role}`);
+      toast(`❌ Could not start ${role}: ${err.message || err}`);
     }
   }
 
@@ -148,6 +148,74 @@ export default function CourtView() {
     a.download = `${court.sessionId}_unified.json`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  // ── Download PDF ─────────────────────────────────────────────────
+  function handleDownloadPDF() {
+    if (!court.lastMerged) return;
+    const entries = court.lastMerged.entries;
+    const overlaps = court.lastMerged.overlaps || [];
+
+    // Escape HTML to prevent injection from transcript text
+    const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    let turnsHTML = '';
+    for (const entry of entries) {
+      const overlapTag = entry.overlap
+        ? ` <span class="overlap">[OVERLAP with ${esc(entry.overlap_with.join(', '))}]</span>`
+        : '';
+      turnsHTML += `
+        <div class="turn">
+          <div class="turn-header">[Turn ${entry.turn}]&ensp;${esc(entry.utc_iso)}${overlapTag}</div>
+          <div class="speaker">${esc(entry.speaker)}&ensp;(offset=${entry.offset_sec ?? '?'}s&ensp;dur=${entry.duration_sec ?? '?'}s)</div>
+          <div class="text" dir="auto">"${esc(entry.text)}"</div>
+        </div>`;
+    }
+
+    let overlapHTML = '';
+    if (overlaps.length) {
+      overlapHTML = `<hr/><div class="summary-title">SIMULTANEOUS SPEECH SUMMARY</div>`;
+      overlaps.forEach((w, i) => {
+        overlapHTML += `<div class="summary-entry">[${i + 1}] ${esc(w.start_iso)} &rarr; ${esc(w.end_iso)} (${w.duration_sec}s) Speakers: ${esc(w.speakers.join(', '))}</div>`;
+      });
+    }
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/>
+<title>Transcript - ${esc(court.sessionId)}</title>
+<style>
+  @page { size: A4; margin: 20mm; }
+  body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; font-size: 12px; line-height: 1.6; color: #000; margin: 0; padding: 20px; }
+  h1 { text-align: center; font-size: 18px; margin-bottom: 6px; }
+  .meta { font-size: 11px; color: #444; margin-bottom: 2px; }
+  hr { border: none; border-top: 1px solid #bbb; margin: 16px 0; }
+  .turn { margin-bottom: 14px; page-break-inside: avoid; }
+  .turn-header { font-weight: bold; font-size: 11px; }
+  .overlap { color: #c00; }
+  .speaker { font-size: 10px; color: #666; padding-left: 8px; }
+  .text { font-size: 13px; padding-left: 8px; direction: auto; unicode-bidi: plaintext; word-wrap: break-word; overflow-wrap: break-word; }
+  .summary-title { font-weight: bold; font-size: 14px; margin-top: 12px; margin-bottom: 8px; }
+  .summary-entry { font-size: 10px; word-wrap: break-word; overflow-wrap: break-word; margin-bottom: 3px; }
+  @media print { body { padding: 0; } }
+</style>
+</head><body>
+<h1>UNIFIED COURT TRANSCRIPT</h1>
+<div class="meta">Session: ${esc(court.sessionId)}</div>
+<div class="meta">Generated: ${new Date().toISOString()}</div>
+<div class="meta">Total turns: ${entries.length}</div>
+${overlaps.length ? `<div class="meta">Simultaneous speech: ${overlaps.length} period(s)</div>` : ''}
+<hr/>
+${turnsHTML}
+${overlapHTML}
+<hr/>
+<div style="text-align:center;font-size:10px;color:#888;">END OF TRANSCRIPT</div>
+</body></html>`;
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) return;
+    printWin.document.write(html);
+    printWin.document.close();
+    printWin.onload = () => printWin.print();
   }
 
   // Cleanup on unmount
@@ -333,6 +401,18 @@ export default function CourtView() {
             }}
           >
             Download JSON
+          </button>
+          <button
+            onClick={handleDownloadPDF}
+            disabled={!court.lastMerged}
+            className="stt-btn stt-btn-ghost"
+            style={{
+              padding: '8px 14px',
+              fontSize: 13,
+              opacity: court.lastMerged ? 1 : 0.35,
+            }}
+          >
+            Download PDF
           </button>
 
           <div style={{ flex: 1 }} />
